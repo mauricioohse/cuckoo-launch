@@ -4,13 +4,16 @@
 #include <vector>
 #include <cmath>
 #include <ctime>
+#include <SDL_ttf.h>
+#include <sstream>
+#include <iomanip>
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 #define TREE_WIDTH 100
 #define BRANCH_SPACING 150  // Vertical space between branches
-#define SQUIRREL_SIZE 60
-#define EGG_SIZE 30
+#define SQUIRREL_SIZE 40
+#define EGG_SIZE 20
 #define GRAVITY 0.5f
 #define TERMINAL_VELOCITY 30.0f
 #define STRENGTH_BAR_WIDTH 200
@@ -48,6 +51,12 @@ SDL_Texture* g_SquirrelTexture = nullptr;
 SDL_Texture* g_TreeTexture = nullptr;
 SDL_Texture* g_BranchTexture = nullptr;
 SDL_Texture* g_ArrowTexture = nullptr;
+TTF_Font* g_Font = nullptr;
+Uint32 g_StartTime = 0;
+bool g_TimerActive = true;
+
+#define TIMER_X (WINDOW_WIDTH - 150)
+#define TIMER_Y 20
 
 struct GameObject {
     float x, y;
@@ -77,8 +86,10 @@ struct GameState {
     float targetCameraY;  // Target position for smooth scrolling
 } g_GameState;
 
-// Add this forward declaration near the top of the file, after the GameState struct
+// forward declarations
 void RenderControls();
+void RenderTimer();
+void ResetTimer();
 
 SDL_Texture* LoadTexture(const char* path)
 {    
@@ -117,6 +128,22 @@ bool InitSDL()
         printf("SDL_image initialization failed! SDL_image Error: %s\n", IMG_GetError());
         return false;
     }
+
+    if (TTF_Init() < 0)
+    {
+        printf("SDL_ttf initialization failed! SDL_ttf Error: %s\n", TTF_GetError());
+        return false;
+    }
+
+    g_Font = TTF_OpenFont("assets/VCR_OSD_MONO_1.001.ttf", 24);
+    if (!g_Font)
+    {
+        printf("Failed to load font! SDL_ttf Error: %s\n", TTF_GetError());
+        return false;
+    }
+
+    g_StartTime = SDL_GetTicks();
+    g_TimerActive = false;
 
     g_Window = SDL_CreateWindow(
         "Cucko Launch",
@@ -355,6 +382,9 @@ RenderGameObject(g_GameState.egg);
     // Render controls
     RenderControls();
 
+    // Add before SDL_RenderPresent
+    RenderTimer();
+
     SDL_RenderPresent(g_Renderer);
 }
 
@@ -369,6 +399,8 @@ void CleanUp()
     SDL_DestroyWindow(g_Window);
     IMG_Quit();
     SDL_Quit();
+    TTF_CloseFont(g_Font);
+    TTF_Quit();
 }
 
 bool CheckCollision(const SDL_Rect& a, const SDL_Rect& b)
@@ -503,6 +535,10 @@ void UpdatePhysics()
             g_GameState.isDepletingCharge = false;
             g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
             g_GameState.angleSquareVelocity = 0.0f;
+            g_GameState.isLaunchingRight = g_GameState.floorSquirrel.isLeftSide;
+
+            // reset timer
+            ResetTimer();
         }
 
 
@@ -534,6 +570,13 @@ void UpdatePhysics()
             printf("Egg caught by floor squirrel!\n");
         }
 
+        // Check if egg reached the top
+        if (g_GameState.egg.y <= 0)
+        {
+            g_TimerActive = false;  // Stop the timer
+            // You might want to add other "victory" logic here
+        }
+
     }
 }
 
@@ -542,7 +585,7 @@ void UpdateControls()
     // Update strength bar
     if (g_GameState.isCharging && !g_GameState.isDepletingCharge)
     {
-        g_GameState.strengthCharge += 0.02f;  // Adjust speed as needed
+        g_GameState.strengthCharge += 0.01f;  // Adjust speed as needed
         if (g_GameState.strengthCharge >= 1.0f)
         {
             g_GameState.strengthCharge = 1.0f;
@@ -658,6 +701,11 @@ void LaunchEgg()
     printf("Launch - Power: %.2f, Angle: %.2f degrees, Direction: %s, VelX: %.2f, VelY: %.2f\n",
            power, angle * 180 / PI, g_GameState.isLaunchingRight ? "Right" : "Left", 
            g_GameState.eggVelocityX, g_GameState.eggVelocityY);
+
+
+    // if timer had not started yet, start it
+    if (!g_TimerActive)
+        g_TimerActive = true;
 }
 
 void UpdateCamera()
@@ -705,6 +753,52 @@ void HitAngleSquare()
     // float jumpPower = ANGLE_JUMP_POWER * g_GameState.strengthCharge;
     float jumpPower = ANGLE_JUMP_POWER;
     g_GameState.angleSquareVelocity = -jumpPower;
+}
+
+void ResetTimer()
+{
+    g_StartTime = SDL_GetTicks();
+    g_TimerActive = false;
+}
+
+void RenderTimer()
+{
+    if (!g_TimerActive) return;
+
+    // Calculate elapsed time
+    Uint32 currentTime = SDL_GetTicks();
+    Uint32 elapsedTime = currentTime - g_StartTime;
+    
+    // Convert to minutes:seconds.milliseconds
+    int minutes = (elapsedTime / 1000) / 60;
+    int seconds = (elapsedTime / 1000) % 60;
+    int milliseconds = elapsedTime % 1000;
+
+    // Format time string
+    std::stringstream ss;
+    ss << std::setfill('0') << std::setw(2) << minutes << ":"
+       << std::setfill('0') << std::setw(2) << seconds << "."
+       << std::setfill('0') << std::setw(3) << milliseconds;
+    
+    // Create surface
+    SDL_Color textColor = {255, 255, 255, 255};  // White color
+    SDL_Surface* surface = TTF_RenderText_Solid(g_Font, ss.str().c_str(), textColor);
+    if (!surface) return;
+
+    // Create texture
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(g_Renderer, surface);
+    SDL_FreeSurface(surface);
+    if (!texture) return;
+
+    // Render timer
+    SDL_Rect timerRect = {
+        TIMER_X,
+        TIMER_Y,
+        surface->w,
+        surface->h
+    };
+    SDL_RenderCopy(g_Renderer, texture, nullptr, &timerRect);
+    SDL_DestroyTexture(texture);
 }
 
 int main(int argc, char* argv[])
