@@ -1,0 +1,6 @@
+*.exe
+
+lib/**
+include/**
+.vscode/**
+bin/**
