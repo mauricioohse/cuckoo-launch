@@ -335,12 +335,22 @@ int main(int argc, char* argv[])
                     case SDLK_ESCAPE:
                         quit = true;
                         break;
-                    // For testing: press space to release egg from squirrel
                     case SDLK_SPACE:
                         if (g_GameState.eggIsHeld)
                         {
                             g_GameState.eggIsHeld = false;
                             g_GameState.eggVelocityY = 0;
+                        }
+                        break;
+                    case SDLK_i:  // New debug teleport
+                        if (!g_GameState.squirrels.empty())
+                        {
+                            // Teleport above the first squirrel
+                            const auto& squirrel = g_GameState.squirrels[0];
+                            g_GameState.egg.x = squirrel.x + (squirrel.width - g_GameState.egg.width) / 2;
+                            g_GameState.egg.y = squirrel.y - g_GameState.egg.height - 50;  // 50 pixels above
+                            g_GameState.eggVelocityY = 0;
+                            g_GameState.eggIsHeld = false;
                         }
                         break;
                 }
