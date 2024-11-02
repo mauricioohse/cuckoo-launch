@@ -22,7 +22,7 @@
 #define ANGLE_BAR_X 240
 #define ANGLE_BAR_Y 370
 #define ANGLE_SQUARE_SIZE 15
-#define ANGLE_GRAVITY 0.3f
+#define ANGLE_GRAVITY 0.5f
 #define ANGLE_JUMP_POWER 8.0f
 #define MAX_LAUNCH_POWER 20.0f   // Maximum launch velocity
 #define PI 3.14159265359f
@@ -554,9 +554,10 @@ void UpdateControls()
         g_GameState.strengthCharge -= 0.02f;  // Adjust speed as needed
         if (g_GameState.strengthCharge <= 0.0f)
         {
+            // Instead of dropping the egg, restart the charge cycle
             g_GameState.strengthCharge = 0.0f;
-            g_GameState.isCharging = false;
-            g_GameState.isDepletingCharge = false;
+            g_GameState.isDepletingCharge = false;  // Switch back to charging mode
+            // Note: We keep isCharging true to continue the cycle
         }
     }
 
@@ -701,7 +702,8 @@ void StartStrengthCharge()
 void HitAngleSquare()
 {
     // Jump the angle square with strength based on current charge
-    float jumpPower = ANGLE_JUMP_POWER * g_GameState.strengthCharge;
+    // float jumpPower = ANGLE_JUMP_POWER * g_GameState.strengthCharge;
+    float jumpPower = ANGLE_JUMP_POWER;
     g_GameState.angleSquareVelocity = -jumpPower;
 }
 
