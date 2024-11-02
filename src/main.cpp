@@ -33,6 +33,9 @@
 #define MAX_BRANCH_EXTENSION 300.0f  // Maximum distance branch extends from tree
 #define BRANCH_HEIGHT 30             // Height of branch texture
 
+#define ARROW_WIDTH 40
+#define ARROW_HEIGHT 15
+
 const int SCREENS_HEIGHT = 15;
 const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * SCREENS_HEIGHT;
 const int BRANCHES_PER_SCREEN = 3;  // Adjust this for desired branch density
@@ -44,6 +47,7 @@ SDL_Texture* g_EggTexture = nullptr;
 SDL_Texture* g_SquirrelTexture = nullptr;
 SDL_Texture* g_TreeTexture = nullptr;
 SDL_Texture* g_BranchTexture = nullptr;
+SDL_Texture* g_ArrowTexture = nullptr;
 
 struct GameObject {
     float x, y;
@@ -138,8 +142,9 @@ bool InitSDL()
     g_SquirrelTexture = LoadTexture("assets/squirrel.png");
     g_TreeTexture = LoadTexture("assets/tree.png");
     g_BranchTexture = LoadTexture("assets/branch.png");
+    g_ArrowTexture = LoadTexture("assets/arrow.png");
 
-    if (!g_EggTexture || !g_SquirrelTexture || !g_TreeTexture || !g_BranchTexture) return false;
+    if (!g_EggTexture || !g_SquirrelTexture || !g_TreeTexture || !g_BranchTexture || !g_ArrowTexture) return false;
 
     return true;
 }
@@ -277,6 +282,46 @@ void RenderGameObject(const GameObject& obj)
     }
 }
 
+void RenderArrow()
+{
+    if (!g_GameState.eggIsHeld) return;
+
+    // Calculate angle based on angle square position
+    float normalizedY = (ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE - g_GameState.angleSquareY) 
+                     / (ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE);
+    float angle = -normalizedY * 90.0f;  // Convert to degrees (0 to 90), negative to point upward
+
+    // If launching left, mirror the angle
+    if (!g_GameState.isLaunchingRight) {
+        angle = 180.0f - angle;
+    }
+
+    // Position arrow with its left edge at egg's center
+    SDL_Rect arrowRect = {
+        static_cast<int>(g_GameState.egg.x + g_GameState.egg.width/2),  // Start at egg's center
+        static_cast<int>(g_GameState.egg.y + g_GameState.egg.height/2 - ARROW_HEIGHT/2 - g_GameState.cameraY),  // Vertically centered
+        ARROW_WIDTH,
+        ARROW_HEIGHT
+    };
+
+    // Create a point for rotation (at the left edge of the arrow)
+    SDL_Point rotationPoint = {
+        0,                    // Pivot at left edge (x=0)
+        ARROW_HEIGHT/2        // Vertically centered
+    };
+
+    // Render the arrow with rotation around its left edge
+    SDL_RenderCopyEx(
+        g_Renderer,
+        g_ArrowTexture,
+        nullptr,
+        &arrowRect,
+        angle,         // Rotation angle in degrees
+        &rotationPoint, // Rotate around left edge
+        SDL_FLIP_NONE  // No flipping
+    );
+}
+
 void Render()
 {
     SDL_SetRenderDrawColor(g_Renderer, 135, 206, 235, 255);  // Sky blue background
@@ -304,6 +349,10 @@ void Render()
     // Render egg
 RenderGameObject(g_GameState.egg);
 
+    // Render arrow
+    RenderArrow();
+
+    // Render controls
     RenderControls();
 
     SDL_RenderPresent(g_Renderer);
@@ -315,6 +364,7 @@ void CleanUp()
     SDL_DestroyTexture(g_SquirrelTexture);
     SDL_DestroyTexture(g_TreeTexture);
     SDL_DestroyTexture(g_BranchTexture);
+    SDL_DestroyTexture(g_ArrowTexture);
     SDL_DestroyRenderer(g_Renderer);
     SDL_DestroyWindow(g_Window);
     IMG_Quit();
