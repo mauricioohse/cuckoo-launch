@@ -9,6 +9,8 @@
 #define BRANCH_SPACING 150  // Vertical space between branches
 #define SQUIRREL_SIZE 60
 #define EGG_SIZE 30
+#define GRAVITY 0.5f
+#define TERMINAL_VELOCITY 10.0f
 
 SDL_Window* g_Window = nullptr;
 SDL_Renderer* g_Renderer = nullptr;
@@ -26,6 +28,8 @@ struct GameObject {
 
 struct GameState {
     GameObject egg;
+    float eggVelocityY;  // Vertical velocity of egg
+    bool eggIsHeld;      // Whether a squirrel is holding the egg
     std::vector<GameObject> squirrels;
     std::vector<GameObject> branches;
     GameObject leftTree;
@@ -159,6 +163,9 @@ void InitGameObjects()
         };
         g_GameState.squirrels.push_back(squirrel);
     }
+
+    g_GameState.eggVelocityY = 0.0f;
+    g_GameState.eggIsHeld = false;
 }
 
 void RenderGameObject(const GameObject& obj)
@@ -217,6 +224,89 @@ void CleanUp()
     SDL_Quit();
 }
 
+bool CheckCollision(const SDL_Rect& a, const SDL_Rect& b)
+{
+    return (a.x < b.x + b.w &&
+            a.x + a.w > b.x &&
+            a.y < b.y + b.h &&
+            a.y + a.h > b.y);
+}
+
+void UpdatePhysics()
+{
+    if (!g_GameState.eggIsHeld)
+    {
+        // Apply gravity
+        g_GameState.eggVelocityY += GRAVITY;
+        
+        // Limit fall speed
+        if (g_GameState.eggVelocityY > TERMINAL_VELOCITY)
+            g_GameState.eggVelocityY = TERMINAL_VELOCITY;
+            
+        // Update egg position
+        g_GameState.egg.y += g_GameState.eggVelocityY;
+
+        // Create egg collision rect
+        SDL_Rect eggRect = {
+            static_cast<int>(g_GameState.egg.x),
+            static_cast<int>(g_GameState.egg.y),
+            g_GameState.egg.width,
+            g_GameState.egg.height
+        };
+
+        // Check collision with trees
+        SDL_Rect leftTreeRect = {
+            static_cast<int>(g_GameState.leftTree.x),
+            static_cast<int>(g_GameState.leftTree.y),
+            g_GameState.leftTree.width,
+            g_GameState.leftTree.height
+        };
+        
+        SDL_Rect rightTreeRect = {
+            static_cast<int>(g_GameState.rightTree.x),
+            static_cast<int>(g_GameState.rightTree.y),
+            g_GameState.rightTree.width,
+            g_GameState.rightTree.height
+        };
+
+        // If egg hits trees, bounce it slightly
+        if (CheckCollision(eggRect, leftTreeRect) || 
+            CheckCollision(eggRect, rightTreeRect))
+        {
+            g_GameState.eggVelocityY = -g_GameState.eggVelocityY * 0.5f; // Bounce with 50% force
+        }
+
+        // Check collision with squirrels
+        for (auto& squirrel : g_GameState.squirrels)
+        {
+            SDL_Rect squirrelRect = {
+                static_cast<int>(squirrel.x),
+                static_cast<int>(squirrel.y),
+                squirrel.width,
+                squirrel.height
+            };
+
+            if (CheckCollision(eggRect, squirrelRect))
+            {
+                g_GameState.eggIsHeld = true;
+                g_GameState.eggVelocityY = 0;
+                // Position egg slightly above squirrel
+                g_GameState.egg.y = squirrel.y - g_GameState.egg.height;
+                g_GameState.egg.x = squirrel.x + (squirrel.width - g_GameState.egg.width) / 2;
+                break;
+            }
+        }
+
+        // Reset if egg falls off screen
+        if (g_GameState.egg.y > WINDOW_HEIGHT)
+        {
+            g_GameState.egg.y = 50.0f;
+            g_GameState.egg.x = WINDOW_WIDTH / 2.0f - EGG_SIZE / 2.0f;
+            g_GameState.eggVelocityY = 0;
+        }
+    }
+}
+
 int main(int argc, char* argv[])
 {
     if (!InitSDL())
@@ -245,10 +335,19 @@ int main(int argc, char* argv[])
                     case SDLK_ESCAPE:
                         quit = true;
                         break;
+                    // For testing: press space to release egg from squirrel
+                    case SDLK_SPACE:
+                        if (g_GameState.eggIsHeld)
+                        {
+                            g_GameState.eggIsHeld = false;
+                            g_GameState.eggVelocityY = 0;
+                        }
+                        break;
                 }
             }
         }
 
+        UpdatePhysics();
         Render();
     }
 
