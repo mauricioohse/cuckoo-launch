@@ -638,6 +638,23 @@ void ResetLevel()
     g_GameState.activeSquirrel = &g_GameState.floorSquirrel;
 }
 
+void StartStrengthCharge()
+{
+    if (g_GameState.eggIsHeld && !g_GameState.isCharging)
+    {
+        g_GameState.isCharging = true;
+        g_GameState.isDepletingCharge = false;
+        g_GameState.strengthCharge = 0.0f;
+    }
+}
+
+void HitAngleSquare()
+{
+    // Jump the angle square with strength based on current charge
+    float jumpPower = ANGLE_JUMP_POWER * g_GameState.strengthCharge;
+    g_GameState.angleSquareVelocity = -jumpPower;
+}
+
 int main(int argc, char* argv[])
 {
     if (!InitSDL())
@@ -696,21 +713,38 @@ int main(int argc, char* argv[])
                             g_GameState.activeSquirrel->isLeftSide = true;  // Make active squirrel face right
                         }
                         break;
+                    case SDLK_k:
+                        // note: keyboard keys events are sent continuously
+                        if (g_GameState.eggIsHeld)
+                        {
+                            StartStrengthCharge();
+                        }
+
+                        break;
+                    case SDLK_l:
+                        if (g_GameState.eggIsHeld)
+                        {
+                            HitAngleSquare();
+                        }
+                        break;
+                }
+            }
+            else if (e.type == SDL_KEYUP)
+            {
+                if (e.key.keysym.sym == SDLK_k && g_GameState.eggIsHeld && g_GameState.isCharging)
+                {
+                    LaunchEgg();
                 }
             }
             else if (e.type == SDL_MOUSEBUTTONDOWN)
             {
                 if (e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
                 {
-                    g_GameState.isCharging = true;
-                    g_GameState.isDepletingCharge = false;
-                    g_GameState.strengthCharge = 0.0f;
+                    StartStrengthCharge();
                 }
                 else if (e.button.button == SDL_BUTTON_RIGHT && g_GameState.eggIsHeld)
                 {
-                    // Jump the angle square with strength based on current charge
-                    float jumpPower = ANGLE_JUMP_POWER * g_GameState.strengthCharge;
-                    g_GameState.angleSquareVelocity = -jumpPower;
+                    HitAngleSquare();
                 }
             }
             else if (e.type == SDL_MOUSEBUTTONUP)
