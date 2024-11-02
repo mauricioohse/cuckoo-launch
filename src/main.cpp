@@ -11,6 +11,17 @@
 #define EGG_SIZE 30
 #define GRAVITY 0.5f
 #define TERMINAL_VELOCITY 10.0f
+#define STRENGTH_BAR_WIDTH 200
+#define STRENGTH_BAR_HEIGHT 20
+#define STRENGTH_BAR_X 20
+#define STRENGTH_BAR_Y 550
+#define ANGLE_BAR_WIDTH 20
+#define ANGLE_BAR_HEIGHT 200
+#define ANGLE_BAR_X 240
+#define ANGLE_BAR_Y 370
+#define ANGLE_SQUARE_SIZE 15
+#define ANGLE_GRAVITY 0.3f
+#define ANGLE_JUMP_POWER 8.0f
 
 SDL_Window* g_Window = nullptr;
 SDL_Renderer* g_Renderer = nullptr;
@@ -34,7 +45,15 @@ struct GameState {
     std::vector<GameObject> branches;
     GameObject leftTree;
     GameObject rightTree;
+    float strengthCharge;     // 0.0 to 1.0
+    bool isCharging;         // Is left mouse being held
+    bool isDepletingCharge;  // Has charge maxed out
+    float angleSquareY;      // Position in the angle bar
+    float angleSquareVelocity;
 } g_GameState;
+
+// Add this forward declaration near the top of the file, after the GameState struct
+void RenderControls();
 
 SDL_Texture* LoadTexture(const char* path)
 {
@@ -141,9 +160,9 @@ void InitGameObjects()
     {
         bool isLeft = i % 2 == 0;
         
-        // Add branch
+        // Add branch with float casting
         GameObject branch = {
-            isLeft ? TREE_WIDTH : WINDOW_WIDTH - TREE_WIDTH - TREE_WIDTH*2,
+            static_cast<float>(isLeft ? TREE_WIDTH : WINDOW_WIDTH - TREE_WIDTH - TREE_WIDTH*2),
             100.0f + i * BRANCH_SPACING,
             TREE_WIDTH*2,
             30,  // Branch height
@@ -152,9 +171,9 @@ void InitGameObjects()
         };
         g_GameState.branches.push_back(branch);
 
-        // Add squirrel at the edge of the branch
+        // Add squirrel with float casting
         GameObject squirrel = {
-            isLeft ? TREE_WIDTH + TREE_WIDTH*2 - SQUIRREL_SIZE : WINDOW_WIDTH - TREE_WIDTH - TREE_WIDTH*2,
+            static_cast<float>(isLeft ? TREE_WIDTH + TREE_WIDTH*2 - SQUIRREL_SIZE : WINDOW_WIDTH - TREE_WIDTH - TREE_WIDTH*2),
             100.0f + i * BRANCH_SPACING - SQUIRREL_SIZE,
             SQUIRREL_SIZE,
             SQUIRREL_SIZE,
@@ -166,6 +185,11 @@ void InitGameObjects()
 
     g_GameState.eggVelocityY = 0.0f;
     g_GameState.eggIsHeld = false;
+    g_GameState.strengthCharge = 0.0f;
+    g_GameState.isCharging = false;
+    g_GameState.isDepletingCharge = false;
+    g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
+    g_GameState.angleSquareVelocity = 0.0f;
 }
 
 void RenderGameObject(const GameObject& obj)
@@ -208,6 +232,8 @@ void Render()
 
     // Render egg
     RenderGameObject(g_GameState.egg);
+
+    RenderControls();
 
     SDL_RenderPresent(g_Renderer);
 }
@@ -307,6 +333,101 @@ void UpdatePhysics()
     }
 }
 
+void UpdateControls()
+{
+    // Update strength bar
+    if (g_GameState.isCharging && !g_GameState.isDepletingCharge)
+    {
+        g_GameState.strengthCharge += 0.02f;  // Adjust speed as needed
+        if (g_GameState.strengthCharge >= 1.0f)
+        {
+            g_GameState.strengthCharge = 1.0f;
+            g_GameState.isDepletingCharge = true;
+        }
+    }
+    else if (g_GameState.isDepletingCharge)
+    {
+        g_GameState.strengthCharge -= 0.02f;  // Adjust speed as needed
+        if (g_GameState.strengthCharge <= 0.0f)
+        {
+            g_GameState.strengthCharge = 0.0f;
+            g_GameState.isCharging = false;
+            g_GameState.isDepletingCharge = false;
+        }
+    }
+
+    // Update angle square physics
+    if (g_GameState.eggIsHeld)
+    {
+        // Apply gravity to angle square
+        g_GameState.angleSquareVelocity += ANGLE_GRAVITY;
+        g_GameState.angleSquareY += g_GameState.angleSquareVelocity;
+
+        // Constrain to bar bounds
+        float maxY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
+        if (g_GameState.angleSquareY > maxY)
+        {
+            g_GameState.angleSquareY = maxY;
+            g_GameState.angleSquareVelocity = 0;
+        }
+        else if (g_GameState.angleSquareY < ANGLE_BAR_Y)
+        {
+            g_GameState.angleSquareY = ANGLE_BAR_Y;
+            g_GameState.angleSquareVelocity = 0;
+        }
+    }
+}
+
+void RenderControls()
+{
+    if (g_GameState.eggIsHeld)
+    {
+        // Draw strength bar background
+        SDL_Rect strengthBarBg = {
+            STRENGTH_BAR_X,
+            STRENGTH_BAR_Y,
+            STRENGTH_BAR_WIDTH,
+            STRENGTH_BAR_HEIGHT
+        };
+        SDL_SetRenderDrawColor(g_Renderer, 100, 100, 100, 255);
+        SDL_RenderFillRect(g_Renderer, &strengthBarBg);
+
+        // Draw strength bar fill
+        SDL_Rect strengthBarFill = {
+            STRENGTH_BAR_X,
+            STRENGTH_BAR_Y,
+            static_cast<int>(STRENGTH_BAR_WIDTH * g_GameState.strengthCharge),
+            STRENGTH_BAR_HEIGHT
+        };
+        SDL_SetRenderDrawColor(g_Renderer, 
+            g_GameState.isDepletingCharge ? 255 : 0,  // Red if depleting
+            g_GameState.isDepletingCharge ? 0 : 255,  // Green if charging
+            0, 
+            255);
+        SDL_RenderFillRect(g_Renderer, &strengthBarFill);
+
+        // Draw angle bar background
+        SDL_Rect angleBarBg = {
+            ANGLE_BAR_X,
+            ANGLE_BAR_Y,
+            ANGLE_BAR_WIDTH,
+            ANGLE_BAR_HEIGHT
+        };
+        SDL_SetRenderDrawColor(g_Renderer, 100, 100, 100, 255);
+        SDL_RenderFillRect(g_Renderer, &angleBarBg);
+
+        // Draw angle square
+        SDL_Rect angleSquare = {
+            ANGLE_BAR_X + (ANGLE_BAR_WIDTH - ANGLE_SQUARE_SIZE) / 2,
+            static_cast<int>(g_GameState.angleSquareY),
+            ANGLE_SQUARE_SIZE,
+            ANGLE_SQUARE_SIZE
+        };
+        SDL_SetRenderDrawColor(g_Renderer, 255, 255, 0, 255);  // Yellow square
+        SDL_RenderFillRect(g_Renderer, &angleSquare);
+    }
+}
+
 int main(int argc, char* argv[])
 {
     if (!InitSDL())
@@ -355,9 +476,36 @@ int main(int argc, char* argv[])
                         break;
                 }
             }
+            else if (e.type == SDL_MOUSEBUTTONDOWN)
+            {
+                if (e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
+                {
+                    g_GameState.isCharging = true;
+                    g_GameState.isDepletingCharge = false;
+                    g_GameState.strengthCharge = 0.0f;
+                }
+                else if (e.button.button == SDL_BUTTON_RIGHT && g_GameState.eggIsHeld)
+                {
+                    // Jump the angle square with strength based on current charge
+                    float jumpPower = ANGLE_JUMP_POWER * g_GameState.strengthCharge;
+                    g_GameState.angleSquareVelocity = -jumpPower;
+                }
+            }
+            else if (e.type == SDL_MOUSEBUTTONUP)
+            {
+                if (e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
+                {
+                    // Launch the egg here (we'll implement this in the next milestone)
+                    g_GameState.isCharging = false;
+                    printf("Launch with power: %f and angle: %f\n", 
+                           g_GameState.strengthCharge,
+                           (g_GameState.angleSquareY - ANGLE_BAR_Y) / ANGLE_BAR_HEIGHT);
+                }
+            }
         }
 
         UpdatePhysics();
+        UpdateControls();
         Render();
     }
 
