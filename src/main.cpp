@@ -11,7 +11,7 @@
 #define SQUIRREL_SIZE 60
 #define EGG_SIZE 30
 #define GRAVITY 0.5f
-#define TERMINAL_VELOCITY 10.0f
+#define TERMINAL_VELOCITY 30.0f
 #define STRENGTH_BAR_WIDTH 200
 #define STRENGTH_BAR_HEIGHT 20
 #define STRENGTH_BAR_X 20
@@ -25,6 +25,11 @@
 #define ANGLE_JUMP_POWER 8.0f
 #define MAX_LAUNCH_POWER 20.0f   // Maximum launch velocity
 #define PI 3.14159265359f
+
+const int SCREENS_HEIGHT = 15;
+const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * SCREENS_HEIGHT;
+const int BRANCHES_PER_SCREEN = 3;  // Adjust this for desired branch density
+const int TOTAL_BRANCHES = BRANCHES_PER_SCREEN * SCREENS_HEIGHT;
 
 SDL_Window* g_Window = nullptr;
 SDL_Renderer* g_Renderer = nullptr;
@@ -57,6 +62,8 @@ struct GameState {
     GameObject floorSquirrel;  // New floor squirrel
     bool isLaunchingRight;  // Direction flag
     GameObject* activeSquirrel;  // Pointer to squirrel currently holding egg
+    float cameraY;  // Vertical camera offset
+    float targetCameraY;  // Target position for smooth scrolling
 } g_GameState;
 
 // Add this forward declaration near the top of the file, after the GameState struct
@@ -146,41 +153,48 @@ bool InitSDL()
 void InitGameObjects()
 {
     // Setup trees
-    g_GameState.leftTree = {0, 0, TREE_WIDTH, WINDOW_HEIGHT, g_TreeTexture, true};
-    g_GameState.rightTree = {WINDOW_WIDTH - TREE_WIDTH, 0, TREE_WIDTH, WINDOW_HEIGHT, g_TreeTexture, false};
-
-    // Setup floor squirrel (centered at bottom)
-    g_GameState.floorSquirrel = {
-        WINDOW_WIDTH / 2.0f - SQUIRREL_SIZE / 2.0f,  // Centered horizontally
-        WINDOW_HEIGHT - SQUIRREL_SIZE - 10,          // 10 pixels from bottom
-        SQUIRREL_SIZE,
-        SQUIRREL_SIZE,
-        g_SquirrelTexture,
-        true  // Facing left by default
-    };
-
-    // Setup initial egg position (top center)
-    g_GameState.egg = {
-        WINDOW_WIDTH / 2.0f - EGG_SIZE / 2.0f,
-        50.0f,
-        EGG_SIZE,
-        EGG_SIZE,
-        g_EggTexture,
+    g_GameState.leftTree = {
+        0.0f,
+        0.0f,
+        TREE_WIDTH,
+        static_cast<int>(TOTAL_GAME_HEIGHT),
+        g_TreeTexture,
         true
     };
 
-    // Create squirrels on alternating sides
-    int numBranches = (WINDOW_HEIGHT - 100) / BRANCH_SPACING;
+    g_GameState.rightTree = {
+        static_cast<float>(WINDOW_WIDTH - TREE_WIDTH),
+        0.0f,
+        TREE_WIDTH,
+        static_cast<int>(TOTAL_GAME_HEIGHT),
+        g_TreeTexture,
+        false
+    };
+
+    // Position floor squirrel at the bottom of the total height
+    g_GameState.floorSquirrel = {
+        static_cast<float>(WINDOW_WIDTH / 2 - SQUIRREL_SIZE / 2),
+        TOTAL_GAME_HEIGHT - SQUIRREL_SIZE,  // Position at bottom of total height
+        SQUIRREL_SIZE,
+        SQUIRREL_SIZE,
+        g_SquirrelTexture,
+        true
+    };
+
+    // Start distributing branches from bottom to top, but above floor squirrel
+    float branchSpacing = TOTAL_GAME_HEIGHT / (TOTAL_BRANCHES + 1);  // +1 to leave space at bottom
     
-    // Create branches and squirrels on alternating sides
-    for (int i = 0; i < numBranches; i++)
+    for (int i = 0; i < TOTAL_BRANCHES; i++)
     {
         bool isLeft = i % 2 == 0;
         
-        // Add branch with float casting
+        // Calculate Y position starting from above floor squirrel
+        float branchY = TOTAL_GAME_HEIGHT - ((i + 2) * branchSpacing);  // +2 to start above floor
+        
+        // Add branch
         GameObject branch = {
             static_cast<float>(isLeft ? TREE_WIDTH : WINDOW_WIDTH - TREE_WIDTH - TREE_WIDTH*2),
-            100.0f + i * BRANCH_SPACING,
+            branchY,
             TREE_WIDTH*2,
             30,  // Branch height
             g_BranchTexture,
@@ -188,17 +202,27 @@ void InitGameObjects()
         };
         g_GameState.branches.push_back(branch);
 
-        // Add squirrel with float casting
+        // Add squirrel
         GameObject squirrel = {
             static_cast<float>(isLeft ? TREE_WIDTH + TREE_WIDTH*2 - SQUIRREL_SIZE : WINDOW_WIDTH - TREE_WIDTH - TREE_WIDTH*2),
-            100.0f + i * BRANCH_SPACING - SQUIRREL_SIZE,
+            branchY - SQUIRREL_SIZE,
             SQUIRREL_SIZE,
             SQUIRREL_SIZE,
             g_SquirrelTexture,
-            isLeft
+            !isLeft
         };
         g_GameState.squirrels.push_back(squirrel);
     }
+
+    // Initial egg position should be with floor squirrel
+    g_GameState.egg = {
+        g_GameState.floorSquirrel.x + (g_GameState.floorSquirrel.width - EGG_SIZE) / 2,
+        EGG_SIZE,
+        EGG_SIZE,
+        EGG_SIZE,
+        g_EggTexture,
+        false
+    };
 
     g_GameState.eggVelocityY = 0.0f;
     g_GameState.eggIsHeld = false;
@@ -210,23 +234,28 @@ void InitGameObjects()
     g_GameState.eggVelocityX = 0.0f;
     g_GameState.isLaunchingRight = true;  // Default to right direction
     g_GameState.activeSquirrel = &g_GameState.floorSquirrel;  // Start with floor squirrel
+    g_GameState.cameraY = 0.0f;
+    g_GameState.targetCameraY = 0.0f;
 }
 
 void RenderGameObject(const GameObject& obj)
 {
     SDL_Rect dest = {
         static_cast<int>(obj.x),
-        static_cast<int>(obj.y),
+        static_cast<int>(obj.y - g_GameState.cameraY),  // Subtract camera offset
         obj.width,
         obj.height
     };
     
-    // Flip squirrel texture based on side
-    SDL_RendererFlip flip = (obj.texture == g_SquirrelTexture && !obj.isLeftSide) 
-        ? SDL_FLIP_HORIZONTAL 
-        : SDL_FLIP_NONE;
-        
-    SDL_RenderCopyEx(g_Renderer, obj.texture, nullptr, &dest, 0, nullptr, flip);
+    // Only render if object is visible on screen
+    if (dest.y + dest.h >= 0 && dest.y <= WINDOW_HEIGHT)
+    {
+        SDL_RendererFlip flip = (obj.texture == g_SquirrelTexture && !obj.isLeftSide) 
+            ? SDL_FLIP_HORIZONTAL 
+            : SDL_FLIP_NONE;
+            
+        SDL_RenderCopyEx(g_Renderer, obj.texture, nullptr, &dest, 0, nullptr, flip);
+    }
 }
 
 void Render()
@@ -285,16 +314,19 @@ void UpdatePhysics()
 {
     if (!g_GameState.eggIsHeld)
     {
-        // Apply gravity and update velocities first
+        // Apply gravity
         g_GameState.eggVelocityY += GRAVITY;
-        
-        // Limit fall speed
         if (g_GameState.eggVelocityY > TERMINAL_VELOCITY)
             g_GameState.eggVelocityY = TERMINAL_VELOCITY;
 
         // Calculate new position
         float newX = g_GameState.egg.x + g_GameState.eggVelocityX;
         float newY = g_GameState.egg.y + g_GameState.eggVelocityY;
+
+        printf("Physics Update - Pos: (%.2f, %.2f), New Pos: (%.2f, %.2f), Vel: (%.2f, %.2f)\n",
+               g_GameState.egg.x, g_GameState.egg.y, 
+               newX, newY,
+               g_GameState.eggVelocityX, g_GameState.eggVelocityY);
 
         // Create egg collision rect at the new position
         SDL_Rect eggRect = {
@@ -304,7 +336,7 @@ void UpdatePhysics()
             g_GameState.egg.height
         };
 
-        // Check collision with trees
+        // Tree collisions
         SDL_Rect leftTreeRect = {
             static_cast<int>(g_GameState.leftTree.x),
             static_cast<int>(g_GameState.leftTree.y),
@@ -323,29 +355,30 @@ void UpdatePhysics()
         bool collided = false;
         if (CheckCollision(eggRect, leftTreeRect))
         {
-            // Bounce off left tree
-            g_GameState.egg.x = g_GameState.leftTree.x + g_GameState.leftTree.width;
-            g_GameState.eggVelocityX = fabs(g_GameState.eggVelocityX) * 0.5f; // Bounce right
+            printf("Left Tree Collision\n");
+            newX = g_GameState.leftTree.x + g_GameState.leftTree.width;
+            g_GameState.eggVelocityX = fabs(g_GameState.eggVelocityX) * 0.5f;
             collided = true;
         }
         else if (CheckCollision(eggRect, rightTreeRect))
         {
-            // Bounce off right tree
-            g_GameState.egg.x = g_GameState.rightTree.x - g_GameState.egg.width;
-            g_GameState.eggVelocityX = -fabs(g_GameState.eggVelocityX) * 0.5f; // Bounce left
+            printf("Right Tree Collision\n");
+            newX = g_GameState.rightTree.x - g_GameState.egg.width;
+            g_GameState.eggVelocityX = -fabs(g_GameState.eggVelocityX) * 0.5f;
             collided = true;
         }
 
         if (collided)
         {
             g_GameState.eggVelocityY *= 0.5f; // Reduce vertical velocity on collision
+            printf("Tree Collision - Adjusting Velocities: VelX=%.2f, VelY=%.2f\n",
+                   g_GameState.eggVelocityX, g_GameState.eggVelocityY);
+            g_GameState.eggVelocityY *= 0.5f;
         }
-        else
-        {
-            // If no collision, update position
-            g_GameState.egg.x = newX;
-            g_GameState.egg.y = newY;
-        }
+
+        // Finally update the actual position
+        g_GameState.egg.x = newX;
+        g_GameState.egg.y = newY;
 
         // Check collision with squirrels
         for (auto& squirrel : g_GameState.squirrels)
@@ -380,7 +413,7 @@ void UpdatePhysics()
         }
 
         // Reset if egg goes off screen (left, right, or bottom) or hits bottom
-        if (g_GameState.egg.y > WINDOW_HEIGHT ||
+        if (g_GameState.egg.y > TOTAL_GAME_HEIGHT - EGG_SIZE ||
             g_GameState.egg.x < -g_GameState.egg.width ||
             g_GameState.egg.x > WINDOW_WIDTH)
         {
@@ -431,6 +464,7 @@ void UpdatePhysics()
             
             printf("Egg caught by floor squirrel!\n");
         }
+
     }
 }
 
@@ -556,6 +590,21 @@ void LaunchEgg()
            g_GameState.eggVelocityX, g_GameState.eggVelocityY);
 }
 
+void UpdateCamera()
+{
+    // Calculate target camera position (center egg vertically)
+    float screenCenterY = WINDOW_HEIGHT / 2.0f;
+    g_GameState.targetCameraY = g_GameState.egg.y - screenCenterY;
+
+    // Clamp camera to game bounds
+    g_GameState.targetCameraY = std::max(0.0f, g_GameState.targetCameraY);
+    g_GameState.targetCameraY = std::min(g_GameState.targetCameraY, TOTAL_GAME_HEIGHT - WINDOW_HEIGHT);
+    
+    // Smooth camera movement (lerp)
+    float smoothSpeed = 0.1f;
+    g_GameState.cameraY += (g_GameState.targetCameraY - g_GameState.cameraY) * smoothSpeed;
+}
+
 int main(int argc, char* argv[])
 {
     if (!InitSDL())
@@ -642,7 +691,10 @@ int main(int argc, char* argv[])
 
         UpdatePhysics();
         UpdateControls();
+        UpdateCamera();  // Add camera update
         Render();
+
+        // SDL_Delay(100);  // Sleep for 100ms (0.1 seconds)
     }
 
     CleanUp();
