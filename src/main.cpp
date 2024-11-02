@@ -2,6 +2,7 @@
 #include <SDL_image.h>
 #include <iostream>
 #include <vector>
+#include <cmath>
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -22,6 +23,8 @@
 #define ANGLE_SQUARE_SIZE 15
 #define ANGLE_GRAVITY 0.3f
 #define ANGLE_JUMP_POWER 8.0f
+#define MAX_LAUNCH_POWER 20.0f   // Maximum launch velocity
+#define PI 3.14159265359f
 
 SDL_Window* g_Window = nullptr;
 SDL_Renderer* g_Renderer = nullptr;
@@ -40,6 +43,7 @@ struct GameObject {
 struct GameState {
     GameObject egg;
     float eggVelocityY;  // Vertical velocity of egg
+    float eggVelocityX;  // Add horizontal velocity
     bool eggIsHeld;      // Whether a squirrel is holding the egg
     std::vector<GameObject> squirrels;
     std::vector<GameObject> branches;
@@ -50,6 +54,9 @@ struct GameState {
     bool isDepletingCharge;  // Has charge maxed out
     float angleSquareY;      // Position in the angle bar
     float angleSquareVelocity;
+    GameObject floorSquirrel;  // New floor squirrel
+    bool isLaunchingRight;  // Direction flag
+    GameObject* activeSquirrel;  // Pointer to squirrel currently holding egg
 } g_GameState;
 
 // Add this forward declaration near the top of the file, after the GameState struct
@@ -142,6 +149,16 @@ void InitGameObjects()
     g_GameState.leftTree = {0, 0, TREE_WIDTH, WINDOW_HEIGHT, g_TreeTexture, true};
     g_GameState.rightTree = {WINDOW_WIDTH - TREE_WIDTH, 0, TREE_WIDTH, WINDOW_HEIGHT, g_TreeTexture, false};
 
+    // Setup floor squirrel (centered at bottom)
+    g_GameState.floorSquirrel = {
+        WINDOW_WIDTH / 2.0f - SQUIRREL_SIZE / 2.0f,  // Centered horizontally
+        WINDOW_HEIGHT - SQUIRREL_SIZE - 10,          // 10 pixels from bottom
+        SQUIRREL_SIZE,
+        SQUIRREL_SIZE,
+        g_SquirrelTexture,
+        true  // Facing left by default
+    };
+
     // Setup initial egg position (top center)
     g_GameState.egg = {
         WINDOW_WIDTH / 2.0f - EGG_SIZE / 2.0f,
@@ -190,6 +207,9 @@ void InitGameObjects()
     g_GameState.isDepletingCharge = false;
     g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
     g_GameState.angleSquareVelocity = 0.0f;
+    g_GameState.eggVelocityX = 0.0f;
+    g_GameState.isLaunchingRight = true;  // Default to right direction
+    g_GameState.activeSquirrel = &g_GameState.floorSquirrel;  // Start with floor squirrel
 }
 
 void RenderGameObject(const GameObject& obj)
@@ -230,6 +250,9 @@ void Render()
         RenderGameObject(squirrel);
     }
 
+    // Render floor squirrel
+    RenderGameObject(g_GameState.floorSquirrel);
+
     // Render egg
     RenderGameObject(g_GameState.egg);
 
@@ -262,20 +285,21 @@ void UpdatePhysics()
 {
     if (!g_GameState.eggIsHeld)
     {
-        // Apply gravity
+        // Apply gravity and update velocities first
         g_GameState.eggVelocityY += GRAVITY;
         
         // Limit fall speed
         if (g_GameState.eggVelocityY > TERMINAL_VELOCITY)
             g_GameState.eggVelocityY = TERMINAL_VELOCITY;
-            
-        // Update egg position
-        g_GameState.egg.y += g_GameState.eggVelocityY;
 
-        // Create egg collision rect
+        // Calculate new position
+        float newX = g_GameState.egg.x + g_GameState.eggVelocityX;
+        float newY = g_GameState.egg.y + g_GameState.eggVelocityY;
+
+        // Create egg collision rect at the new position
         SDL_Rect eggRect = {
-            static_cast<int>(g_GameState.egg.x),
-            static_cast<int>(g_GameState.egg.y),
+            static_cast<int>(newX),
+            static_cast<int>(newY),
             g_GameState.egg.width,
             g_GameState.egg.height
         };
@@ -295,11 +319,32 @@ void UpdatePhysics()
             g_GameState.rightTree.height
         };
 
-        // If egg hits trees, bounce it slightly
-        if (CheckCollision(eggRect, leftTreeRect) || 
-            CheckCollision(eggRect, rightTreeRect))
+        // Handle tree collisions
+        bool collided = false;
+        if (CheckCollision(eggRect, leftTreeRect))
         {
-            g_GameState.eggVelocityY = -g_GameState.eggVelocityY * 0.5f; // Bounce with 50% force
+            // Bounce off left tree
+            g_GameState.egg.x = g_GameState.leftTree.x + g_GameState.leftTree.width;
+            g_GameState.eggVelocityX = fabs(g_GameState.eggVelocityX) * 0.5f; // Bounce right
+            collided = true;
+        }
+        else if (CheckCollision(eggRect, rightTreeRect))
+        {
+            // Bounce off right tree
+            g_GameState.egg.x = g_GameState.rightTree.x - g_GameState.egg.width;
+            g_GameState.eggVelocityX = -fabs(g_GameState.eggVelocityX) * 0.5f; // Bounce left
+            collided = true;
+        }
+
+        if (collided)
+        {
+            g_GameState.eggVelocityY *= 0.5f; // Reduce vertical velocity on collision
+        }
+        else
+        {
+            // If no collision, update position
+            g_GameState.egg.x = newX;
+            g_GameState.egg.y = newY;
         }
 
         // Check collision with squirrels
@@ -315,20 +360,76 @@ void UpdatePhysics()
             if (CheckCollision(eggRect, squirrelRect))
             {
                 g_GameState.eggIsHeld = true;
+                g_GameState.eggVelocityX = 0;
                 g_GameState.eggVelocityY = 0;
-                // Position egg slightly above squirrel
                 g_GameState.egg.y = squirrel.y - g_GameState.egg.height;
                 g_GameState.egg.x = squirrel.x + (squirrel.width - g_GameState.egg.width) / 2;
+                g_GameState.activeSquirrel = &squirrel;
+                g_GameState.isLaunchingRight = g_GameState.activeSquirrel->isLeftSide;  // Sync launch direction
+                
+                // Reset control states when caught
+                g_GameState.strengthCharge = 0.0f;
+                g_GameState.isCharging = false;
+                g_GameState.isDepletingCharge = false;
+                g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
+                g_GameState.angleSquareVelocity = 0.0f;
+                
+                printf("Egg caught by squirrel!\n");
                 break;
             }
         }
 
-        // Reset if egg falls off screen
-        if (g_GameState.egg.y > WINDOW_HEIGHT)
+        // Reset if egg goes off screen (left, right, or bottom) or hits bottom
+        if (g_GameState.egg.y > WINDOW_HEIGHT ||
+            g_GameState.egg.x < -g_GameState.egg.width ||
+            g_GameState.egg.x > WINDOW_WIDTH)
         {
-            g_GameState.egg.y = 50.0f;
-            g_GameState.egg.x = WINDOW_WIDTH / 2.0f - EGG_SIZE / 2.0f;
+            printf("Egg missed - giving to floor squirrel\n");
+            
+            // Position egg with floor squirrel
+            g_GameState.egg.x = g_GameState.floorSquirrel.x + 
+                (g_GameState.floorSquirrel.width - g_GameState.egg.width) / 2;
+            g_GameState.egg.y = g_GameState.floorSquirrel.y - g_GameState.egg.height;
+            
+            g_GameState.eggVelocityX = 0;
             g_GameState.eggVelocityY = 0;
+            g_GameState.eggIsHeld = true;
+            
+            // Reset control states
+            g_GameState.strengthCharge = 0.0f;
+            g_GameState.isCharging = false;
+            g_GameState.isDepletingCharge = false;
+            g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
+            g_GameState.angleSquareVelocity = 0.0f;
+        }
+
+
+        SDL_Rect floorSquirrelRect = {
+            static_cast<int>(g_GameState.floorSquirrel.x),
+            static_cast<int>(g_GameState.floorSquirrel.y),
+            g_GameState.floorSquirrel.width,
+            g_GameState.floorSquirrel.height
+        };
+
+        if (CheckCollision(eggRect, floorSquirrelRect))
+        {
+            g_GameState.eggIsHeld = true;
+            g_GameState.eggVelocityX = 0;
+            g_GameState.eggVelocityY = 0;
+            g_GameState.egg.y = g_GameState.floorSquirrel.y - g_GameState.egg.height;
+            g_GameState.egg.x = g_GameState.floorSquirrel.x + 
+                (g_GameState.floorSquirrel.width - g_GameState.egg.width) / 2;
+            g_GameState.activeSquirrel = &g_GameState.floorSquirrel;
+            g_GameState.isLaunchingRight = g_GameState.activeSquirrel->isLeftSide;  // Sync launch direction
+            
+            // Reset control states
+            g_GameState.strengthCharge = 0.0f;
+            g_GameState.isCharging = false;
+            g_GameState.isDepletingCharge = false;
+            g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
+            g_GameState.angleSquareVelocity = 0.0f;
+            
+            printf("Egg caught by floor squirrel!\n");
         }
     }
 }
@@ -428,6 +529,33 @@ void RenderControls()
     }
 }
 
+void LaunchEgg()
+{
+    // Calculate angle (0 at bottom, PI/2 at top)
+    float normalizedY = (ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE - g_GameState.angleSquareY) 
+                     / (ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE);
+    float angle = normalizedY * PI / 2;  // Convert to radians (0 to PI/2)
+
+    // Calculate launch power
+    float power = MAX_LAUNCH_POWER * g_GameState.strengthCharge;
+
+    // Calculate velocities using trigonometry
+    if (g_GameState.isLaunchingRight) {
+        g_GameState.eggVelocityX = power * cos(angle);
+    } else {
+        g_GameState.eggVelocityX = -power * cos(angle);  // Negative for left direction
+    }
+    g_GameState.eggVelocityY = -power * sin(angle);
+
+    // Release the egg
+    g_GameState.eggIsHeld = false;
+    g_GameState.isCharging = false;
+    
+    printf("Launch - Power: %.2f, Angle: %.2f degrees, Direction: %s, VelX: %.2f, VelY: %.2f\n",
+           power, angle * 180 / PI, g_GameState.isLaunchingRight ? "Right" : "Left", 
+           g_GameState.eggVelocityX, g_GameState.eggVelocityY);
+}
+
 int main(int argc, char* argv[])
 {
     if (!InitSDL())
@@ -474,6 +602,18 @@ int main(int argc, char* argv[])
                             g_GameState.eggIsHeld = false;
                         }
                         break;
+                    case SDLK_a:
+                        if (g_GameState.eggIsHeld && g_GameState.activeSquirrel) {
+                            g_GameState.isLaunchingRight = false;
+                            g_GameState.activeSquirrel->isLeftSide = false;  // Make active squirrel face left
+                        }
+                        break;
+                    case SDLK_d:
+                        if (g_GameState.eggIsHeld && g_GameState.activeSquirrel) {
+                            g_GameState.isLaunchingRight = true;
+                            g_GameState.activeSquirrel->isLeftSide = true;  // Make active squirrel face right
+                        }
+                        break;
                 }
             }
             else if (e.type == SDL_MOUSEBUTTONDOWN)
@@ -495,11 +635,7 @@ int main(int argc, char* argv[])
             {
                 if (e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
                 {
-                    // Launch the egg here (we'll implement this in the next milestone)
-                    g_GameState.isCharging = false;
-                    printf("Launch with power: %f and angle: %f\n", 
-                           g_GameState.strengthCharge,
-                           (g_GameState.angleSquareY - ANGLE_BAR_Y) / ANGLE_BAR_HEIGHT);
+                    LaunchEgg();
                 }
             }
         }
