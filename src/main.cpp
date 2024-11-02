@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <ctime>
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -25,6 +26,12 @@
 #define ANGLE_JUMP_POWER 8.0f
 #define MAX_LAUNCH_POWER 20.0f   // Maximum launch velocity
 #define PI 3.14159265359f
+
+#define MIN_BRANCH_SPACING (WINDOW_HEIGHT * 0.1f)  // Minimum vertical gap between branches
+#define MAX_BRANCH_SPACING (WINDOW_HEIGHT * 0.5f)  // Maximum vertical gap between branches
+#define MIN_BRANCH_EXTENSION 50.0f   // Minimum distance branch extends from tree
+#define MAX_BRANCH_EXTENSION 300.0f  // Maximum distance branch extends from tree
+#define BRANCH_HEIGHT 30             // Height of branch texture
 
 const int SCREENS_HEIGHT = 15;
 const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * SCREENS_HEIGHT;
@@ -70,20 +77,15 @@ struct GameState {
 void RenderControls();
 
 SDL_Texture* LoadTexture(const char* path)
-{
-    printf("Attempting to load texture: %s\n", path);
-    
+{    
     SDL_Surface* surface = IMG_Load(path);
     if (!surface)
     {
         printf("Failed to load image %s!\n", path);
         printf("SDL_image Error: %s\n", IMG_GetError());
-        printf("Current working directory might be wrong.\n");
         return nullptr;
     }
 
-    printf("Successfully loaded surface: %s (Width: %d, Height: %d)\n", 
-           path, surface->w, surface->h);
 
     SDL_Texture* texture = SDL_CreateTextureFromSurface(g_Renderer, surface);
     if (!texture)
@@ -93,14 +95,6 @@ SDL_Texture* LoadTexture(const char* path)
         SDL_FreeSurface(surface);
         return nullptr;
     }
-
-    printf("Successfully created texture from %s\n", path);
-    
-    // Get texture information
-    Uint32 format;
-    int access, width, height;
-    SDL_QueryTexture(texture, &format, &access, &width, &height);
-    printf("Texture details - Width: %d, Height: %d\n", width, height);
 
     SDL_FreeSurface(surface);
     return texture;
@@ -150,6 +144,61 @@ bool InitSDL()
     return true;
 }
 
+void GenerateBranchesAndSquirrels()
+{
+    // Clear existing branches and squirrels
+    g_GameState.branches.clear();
+    g_GameState.squirrels.clear();
+
+    // Set random seed based on time
+    srand(static_cast<unsigned>(time(nullptr)));
+
+    float currentHeight = TOTAL_GAME_HEIGHT - WINDOW_HEIGHT*0.3f;  // Start above floor squirrel
+    bool isLeft = rand() % 2 == 0;  // Random starting side
+
+    while (currentHeight > 0)  // Generate until we reach the top
+    {
+        // Random height spacing for this branch
+        float spacing = MIN_BRANCH_SPACING + 
+            static_cast<float>(rand()) / RAND_MAX * (MAX_BRANCH_SPACING - MIN_BRANCH_SPACING);
+        
+        // Random extension from tree
+        float extension = MIN_BRANCH_EXTENSION + 
+            static_cast<float>(rand()) / RAND_MAX * (MAX_BRANCH_EXTENSION - MIN_BRANCH_EXTENSION);
+
+        // Calculate branch position
+        float branchX = isLeft ? TREE_WIDTH : WINDOW_WIDTH - TREE_WIDTH - extension;
+        
+        // Add branch
+        GameObject branch = {
+            branchX,
+            currentHeight,
+            extension,
+            BRANCH_HEIGHT,
+            g_BranchTexture,
+            isLeft
+        };
+        g_GameState.branches.push_back(branch);
+
+        // Add squirrel (positioned at end of branch)
+        GameObject squirrel = {
+            isLeft ? branchX + extension - SQUIRREL_SIZE : branchX,
+            currentHeight - SQUIRREL_SIZE,
+            SQUIRREL_SIZE,
+            SQUIRREL_SIZE,
+            g_SquirrelTexture,
+            isLeft
+        };
+        g_GameState.squirrels.push_back(squirrel);
+
+        // Update for next iteration
+        currentHeight -= spacing;
+        isLeft = !isLeft;  // Alternate sides
+    }
+
+    printf("Generated %zu branches and squirrels\n", g_GameState.branches.size());
+}
+
 void InitGameObjects()
 {
     // Setup trees
@@ -181,43 +230,13 @@ void InitGameObjects()
         true
     };
 
-    // Start distributing branches from bottom to top, but above floor squirrel
-    float branchSpacing = TOTAL_GAME_HEIGHT / (TOTAL_BRANCHES + 1);  // +1 to leave space at bottom
-    
-    for (int i = 0; i < TOTAL_BRANCHES; i++)
-    {
-        bool isLeft = i % 2 == 0;
-        
-        // Calculate Y position starting from above floor squirrel
-        float branchY = TOTAL_GAME_HEIGHT - ((i + 2) * branchSpacing);  // +2 to start above floor
-        
-        // Add branch
-        GameObject branch = {
-            static_cast<float>(isLeft ? TREE_WIDTH : WINDOW_WIDTH - TREE_WIDTH - TREE_WIDTH*2),
-            branchY,
-            TREE_WIDTH*2,
-            30,  // Branch height
-            g_BranchTexture,
-            isLeft
-        };
-        g_GameState.branches.push_back(branch);
+    // Generate branches and squirrels
+    GenerateBranchesAndSquirrels();
 
-        // Add squirrel
-        GameObject squirrel = {
-            static_cast<float>(isLeft ? TREE_WIDTH + TREE_WIDTH*2 - SQUIRREL_SIZE : WINDOW_WIDTH - TREE_WIDTH - TREE_WIDTH*2),
-            branchY - SQUIRREL_SIZE,
-            SQUIRREL_SIZE,
-            SQUIRREL_SIZE,
-            g_SquirrelTexture,
-            !isLeft
-        };
-        g_GameState.squirrels.push_back(squirrel);
-    }
-
-    // Initial egg position should be with floor squirrel
+    // Initialize egg with floor squirrel
     g_GameState.egg = {
         g_GameState.floorSquirrel.x + (g_GameState.floorSquirrel.width - EGG_SIZE) / 2,
-        EGG_SIZE,
+        g_GameState.floorSquirrel.y - EGG_SIZE,
         EGG_SIZE,
         EGG_SIZE,
         g_EggTexture,
@@ -283,7 +302,7 @@ void Render()
     RenderGameObject(g_GameState.floorSquirrel);
 
     // Render egg
-    RenderGameObject(g_GameState.egg);
+RenderGameObject(g_GameState.egg);
 
     RenderControls();
 
@@ -323,10 +342,10 @@ void UpdatePhysics()
         float newX = g_GameState.egg.x + g_GameState.eggVelocityX;
         float newY = g_GameState.egg.y + g_GameState.eggVelocityY;
 
-        printf("Physics Update - Pos: (%.2f, %.2f), New Pos: (%.2f, %.2f), Vel: (%.2f, %.2f)\n",
-               g_GameState.egg.x, g_GameState.egg.y, 
-               newX, newY,
-               g_GameState.eggVelocityX, g_GameState.eggVelocityY);
+        // printf("Physics Update - Pos: (%.2f, %.2f), New Pos: (%.2f, %.2f), Vel: (%.2f, %.2f)\n",
+        //        g_GameState.egg.x, g_GameState.egg.y, 
+        //        newX, newY,
+        //        g_GameState.eggVelocityX, g_GameState.eggVelocityY);
 
         // Create egg collision rect at the new position
         SDL_Rect eggRect = {
@@ -603,6 +622,20 @@ void UpdateCamera()
     // Smooth camera movement (lerp)
     float smoothSpeed = 0.1f;
     g_GameState.cameraY += (g_GameState.targetCameraY - g_GameState.cameraY) * smoothSpeed;
+}
+
+void ResetLevel()
+{
+    GenerateBranchesAndSquirrels();
+    
+    // Reset egg to floor squirrel
+    g_GameState.egg.x = g_GameState.floorSquirrel.x + 
+        (g_GameState.floorSquirrel.width - g_GameState.egg.width) / 2;
+    g_GameState.egg.y = g_GameState.floorSquirrel.y - g_GameState.egg.height;
+    g_GameState.eggVelocityX = 0;
+    g_GameState.eggVelocityY = 0;
+    g_GameState.eggIsHeld = true;
+    g_GameState.activeSquirrel = &g_GameState.floorSquirrel;
 }
 
 int main(int argc, char* argv[])
