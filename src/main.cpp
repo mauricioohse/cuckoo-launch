@@ -159,7 +159,7 @@ void GenerateBranchesAndSquirrels()
     srand(static_cast<unsigned>(time(nullptr)));
 
     float currentHeight = TOTAL_GAME_HEIGHT - WINDOW_HEIGHT*0.3f;  // Start above floor squirrel
-    bool isLeft = rand() % 2 == 0;  // Random starting side
+    bool isLeft = false;  // always start with branch on the right
 
     while (currentHeight > 0)  // Generate until we reach the top
     {
