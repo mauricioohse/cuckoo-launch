@@ -53,10 +53,16 @@ SDL_Texture* g_BranchTexture = nullptr;
 SDL_Texture* g_ArrowTexture = nullptr;
 TTF_Font* g_Font = nullptr;
 Uint32 g_StartTime = 0;
-bool g_TimerActive = true;
+bool g_TimerActive = false;
+bool g_WinAchieved = false;
+Uint32 g_lastElapsedTime = 0;
 
 #define TIMER_X (WINDOW_WIDTH - 150)
 #define TIMER_Y 20
+
+#define SCORE_FILE "assets/scores.txt"
+#define WIN_MESSAGE_X (WINDOW_WIDTH / 2)
+#define WIN_MESSAGE_Y (WINDOW_HEIGHT / 2)
 
 struct GameObject {
     float x, y;
@@ -90,6 +96,8 @@ struct GameState {
 void RenderControls();
 void RenderTimer();
 void ResetTimer();
+void SaveScore(Uint32 time);
+void RenderWinMessage();
 
 SDL_Texture* LoadTexture(const char* path)
 {    
@@ -144,6 +152,7 @@ bool InitSDL()
 
     g_StartTime = SDL_GetTicks();
     g_TimerActive = false;
+    g_WinAchieved = false;
 
     g_Window = SDL_CreateWindow(
         "Cucko Launch",
@@ -384,6 +393,7 @@ RenderGameObject(g_GameState.egg);
 
     // Add before SDL_RenderPresent
     RenderTimer();
+    RenderWinMessage();
 
     SDL_RenderPresent(g_Renderer);
 }
@@ -570,11 +580,25 @@ void UpdatePhysics()
             printf("Egg caught by floor squirrel!\n");
         }
 
-        // Check if egg reached the top
+
+        // Check if egg reached the top - win condition
         if (g_GameState.egg.y <= 0)
         {
-            g_TimerActive = false;  // Stop the timer
-            // You might want to add other "victory" logic here
+            if (g_TimerActive)  // Only save score once
+            {
+                printf("win condition achieved\n");
+                g_TimerActive = false;  // Stop the timer
+                SaveScore(SDL_GetTicks() - g_StartTime);  // Save the score
+                g_WinAchieved = true;
+                // teleport to floor squirrel
+                g_GameState.egg.x = g_GameState.floorSquirrel.x + 
+                    (g_GameState.floorSquirrel.width - g_GameState.egg.width) / 2;
+                g_GameState.egg.y = g_GameState.floorSquirrel.y - g_GameState.egg.height;
+                g_GameState.eggVelocityX = 0;
+                g_GameState.eggVelocityY = 0;
+                g_GameState.eggIsHeld = true;
+                g_GameState.activeSquirrel = &g_GameState.floorSquirrel;
+            }
         }
 
     }
@@ -705,7 +729,11 @@ void LaunchEgg()
 
     // if timer had not started yet, start it
     if (!g_TimerActive)
-        g_TimerActive = true;
+        {
+            g_StartTime = SDL_GetTicks();
+            g_TimerActive = true;
+            g_WinAchieved = false;
+        }
 }
 
 void UpdateCamera()
@@ -768,6 +796,7 @@ void RenderTimer()
     // Calculate elapsed time
     Uint32 currentTime = SDL_GetTicks();
     Uint32 elapsedTime = currentTime - g_StartTime;
+    g_lastElapsedTime = elapsedTime;
     
     // Convert to minutes:seconds.milliseconds
     int minutes = (elapsedTime / 1000) / 60;
@@ -798,6 +827,58 @@ void RenderTimer()
         surface->h
     };
     SDL_RenderCopy(g_Renderer, texture, nullptr, &timerRect);
+    SDL_DestroyTexture(texture);
+}
+
+void SaveScore(Uint32 time)
+{
+    FILE* file = fopen(SCORE_FILE, "a");  // Open in append mode
+    if (file)
+    {
+        // Convert time to minutes:seconds.milliseconds format
+        int minutes = (time / 1000) / 60;
+        int seconds = (time / 1000) % 60;
+        int milliseconds = time % 1000;
+        
+        fprintf(file, "%02d:%02d.%03d\n", minutes, seconds, milliseconds);
+        fclose(file);
+    }
+}
+
+void RenderWinMessage()
+{
+    if (g_TimerActive || !g_WinAchieved) return;  // Only show when game is won
+
+    // Calculate final time
+    int minutes = (g_lastElapsedTime / 1000) / 60;
+    int seconds = (g_lastElapsedTime / 1000) % 60;
+    int milliseconds = g_lastElapsedTime % 1000;
+
+    // Format win message
+    std::stringstream ss;
+    ss << "Final Time: " << std::setfill('0') << std::setw(2) << minutes 
+       << ":" << std::setfill('0') << std::setw(2) << seconds 
+       << "." << std::setfill('0') << std::setw(3) << milliseconds;
+
+    // Create surface
+    SDL_Color textColor = {255, 255, 255, 255};  // White color
+    SDL_Surface* surface = TTF_RenderText_Solid(g_Font, ss.str().c_str(), textColor);
+    if (!surface) return;
+
+    // Create texture
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(g_Renderer, surface);
+    SDL_FreeSurface(surface);
+    if (!texture) return;
+
+    // Center the text
+    SDL_Rect messageRect = {
+        WIN_MESSAGE_X - surface->w / 2,  // Center horizontally
+        WIN_MESSAGE_Y - surface->h / 2,  // Center vertically
+        surface->w,
+        surface->h
+    };
+
+    SDL_RenderCopy(g_Renderer, texture, nullptr, &messageRect);
     SDL_DestroyTexture(texture);
 }
 
