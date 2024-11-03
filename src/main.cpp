@@ -12,8 +12,11 @@
 #define WINDOW_HEIGHT 600
 #define TREE_WIDTH 100
 #define BRANCH_SPACING 150  // Vertical space between branches
-#define SQUIRREL_SIZE 40
-#define EGG_SIZE 20
+#define SQUIRREL_SIZE 60
+#define EGG_SIZE_X 40
+#define EGG_SIZE_Y 60
+#define EGG_ANIMATION_SPEED 1.0f  // Adjust speed as needed, measured in seconds
+#define EGG_SPRITE_COUNT 3
 #define GRAVITY 0.5f
 #define TERMINAL_VELOCITY 30.0f
 #define STRENGTH_BAR_WIDTH 200
@@ -64,6 +67,9 @@ Uint32 g_lastElapsedTime = 0;
 #define WIN_MESSAGE_X (WINDOW_WIDTH / 2)
 #define WIN_MESSAGE_Y (WINDOW_HEIGHT / 2)
 
+SDL_Texture* g_EggTextures[EGG_SPRITE_COUNT] = {nullptr};
+float g_EggAnimationTime = 0.0f;
+
 struct GameObject {
     float x, y;
     int width, height;
@@ -90,6 +96,7 @@ struct GameState {
     GameObject* activeSquirrel = nullptr;  // Pointer to squirrel currently holding egg
     float cameraY;  // Vertical camera offset
     float targetCameraY;  // Target position for smooth scrolling
+    int currentEggSprite = 0;
 } g_GameState;
 
 // forward declarations
@@ -181,6 +188,21 @@ bool InitSDL()
     g_ArrowTexture = LoadTexture("assets/arrow.png");
 
     if (!g_EggTexture || !g_SquirrelTexture || !g_TreeTexture || !g_BranchTexture || !g_ArrowTexture) return false;
+
+    // Load egg sprites
+    g_EggTextures[0] = LoadTexture("assets/egg/egg_closed_1.png");
+    g_EggTextures[1] = LoadTexture("assets/egg/egg_closing_2.png");
+    g_EggTextures[2] = LoadTexture("assets/egg/egg_open_3.png");
+
+    // Check if all textures loaded successfully
+    for (int i = 0; i < EGG_SPRITE_COUNT; i++)
+    {
+        if (!g_EggTextures[i])
+        {
+            printf("Failed to load egg sprite %d\n", i + 1);
+            return false;
+        }
+    }
 
     return true;
 }
@@ -276,10 +298,10 @@ void InitGameObjects()
 
     // Initialize egg with floor squirrel
     g_GameState.egg = {
-        g_GameState.floorSquirrel.x + (g_GameState.floorSquirrel.width - EGG_SIZE) / 2,
-        g_GameState.floorSquirrel.y - EGG_SIZE,
-        EGG_SIZE,
-        EGG_SIZE,
+        g_GameState.floorSquirrel.x + (g_GameState.floorSquirrel.width - EGG_SIZE_X) / 2,
+        g_GameState.floorSquirrel.y - EGG_SIZE_Y,
+        EGG_SIZE_X,
+        EGG_SIZE_Y,
         g_EggTexture,
         false
     };
@@ -300,21 +322,38 @@ void InitGameObjects()
 
 void RenderGameObject(const GameObject& obj)
 {
-    SDL_Rect dest = {
-        static_cast<int>(obj.x),
-        static_cast<int>(obj.y - g_GameState.cameraY),  // Subtract camera offset
-        obj.width,
-        obj.height
-    };
-    
-    // Only render if object is visible on screen
-    if (dest.y + dest.h >= 0 && dest.y <= WINDOW_HEIGHT)
+    if (&obj == &g_GameState.egg)
     {
-        SDL_RendererFlip flip = (obj.texture == g_SquirrelTexture && !obj.isLeftSide) 
-            ? SDL_FLIP_HORIZONTAL 
-            : SDL_FLIP_NONE;
-            
-        SDL_RenderCopyEx(g_Renderer, obj.texture, nullptr, &dest, 0, nullptr, flip);
+        SDL_Rect destRect = {
+            static_cast<int>(obj.x),
+            static_cast<int>(obj.y - g_GameState.cameraY),
+            obj.width,
+            obj.height
+        };
+
+        SDL_RenderCopy(g_Renderer, 
+                      g_EggTextures[g_GameState.currentEggSprite], 
+                      nullptr, 
+                      &destRect);
+    }
+    else
+    {
+        SDL_Rect dest = {
+            static_cast<int>(obj.x),
+            static_cast<int>(obj.y - g_GameState.cameraY),  // Subtract camera offset
+            obj.width,
+            obj.height
+        };
+        
+        // Only render if object is visible on screen
+        if (dest.y + dest.h >= 0 && dest.y <= WINDOW_HEIGHT)
+        {
+            SDL_RendererFlip flip = (obj.texture == g_SquirrelTexture && !obj.isLeftSide) 
+                ? SDL_FLIP_HORIZONTAL 
+                : SDL_FLIP_NONE;
+                
+            SDL_RenderCopyEx(g_Renderer, obj.texture, nullptr, &dest, 0, nullptr, flip);
+        }
     }
 }
 
@@ -383,7 +422,7 @@ void Render()
     RenderGameObject(g_GameState.floorSquirrel);
 
     // Render egg
-RenderGameObject(g_GameState.egg);
+    RenderGameObject(g_GameState.egg);
 
     // Render arrow
     RenderArrow();
@@ -411,6 +450,12 @@ void CleanUp()
     SDL_Quit();
     TTF_CloseFont(g_Font);
     TTF_Quit();
+
+    // Cleanup egg textures
+    for (int i = 0; i < EGG_SPRITE_COUNT; i++)
+    {
+        SDL_DestroyTexture(g_EggTextures[i]);
+    }
 }
 
 bool CheckCollision(const SDL_Rect& a, const SDL_Rect& b)
@@ -438,6 +483,10 @@ void HandleCollision(GameObject *squirrel)
             g_GameState.isDepletingCharge = false;
             g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
             g_GameState.angleSquareVelocity = 0.0f;
+
+            
+            g_GameState.currentEggSprite = 0;  // Reset animation
+            g_EggAnimationTime = 0.0f;
 }
 
 void UpdatePhysics()
@@ -529,7 +578,7 @@ void UpdatePhysics()
         }
 
         // Reset if egg goes off screen (left, right, or bottom) or hits bottom
-        if (g_GameState.egg.y > TOTAL_GAME_HEIGHT - EGG_SIZE ||
+        if (g_GameState.egg.y > TOTAL_GAME_HEIGHT - EGG_SIZE_Y ||
             g_GameState.egg.x < -g_GameState.egg.width ||
             g_GameState.egg.x > WINDOW_WIDTH)
         {
@@ -709,6 +758,7 @@ void LaunchEgg()
             g_WinAchieved = false;
         }
     //g_GameState.activeSquirrel = nullptr;  // Clear active squirrel
+    g_GameState.currentEggSprite = 0;  // Reset to closed sprite when launching
 }
 
 void UpdateCamera()
@@ -857,6 +907,39 @@ void RenderWinMessage()
     SDL_DestroyTexture(texture);
 }
 
+void UpdateEggAnimation(float deltaTime)
+{
+    // printf("deltaTime: %.4f, eggAnimationTime: %.4f, EGG_ANIMATION_SPEED: %.4f\n",
+    //        deltaTime, g_EggAnimationTime, EGG_ANIMATION_SPEED);
+
+    int oldSprite = g_GameState.currentEggSprite;
+    
+    if (!g_GameState.eggIsHeld)
+    {
+        // When flying/idle, use closed egg sprite
+        g_GameState.currentEggSprite = 0;
+        g_EggAnimationTime = 0.0f;
+    }
+    else
+    {
+        // When held, cycle through sprites
+        g_EggAnimationTime += deltaTime;
+        if (g_EggAnimationTime >= EGG_ANIMATION_SPEED)
+        {
+            g_EggAnimationTime = 0.0f;
+            if (g_GameState.currentEggSprite!=2)
+                g_GameState.currentEggSprite++; // clamps at the third animation
+        }
+    }
+
+    if (oldSprite != g_GameState.currentEggSprite) {
+        printf("Egg sprite changed from %d to %d (%s)\n", 
+               oldSprite, 
+               g_GameState.currentEggSprite,
+               g_GameState.eggIsHeld ? "held" : "not held");
+    }
+}
+
 int main(int argc, char* argv[])
 {
     if (!InitSDL())
@@ -869,6 +952,8 @@ int main(int argc, char* argv[])
 
     bool quit = false;
     SDL_Event e;
+
+    Uint32 lastTime = SDL_GetTicks();
 
     while (!quit)
     {
@@ -958,9 +1043,15 @@ int main(int argc, char* argv[])
             }
         }
 
+        // used for sprite cycling
+        Uint32 currentTime = SDL_GetTicks();
+        float deltaTime = (currentTime - lastTime) / 1000.0f;
+        lastTime = currentTime;
+
         UpdatePhysics();
         UpdateControls();
         UpdateCamera();  // Add camera update
+        UpdateEggAnimation(deltaTime);  // Add this line
         Render();
 
         // SDL_Delay(100);  // Sleep for 100ms (0.1 seconds)
