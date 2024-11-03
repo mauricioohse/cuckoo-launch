@@ -56,6 +56,10 @@ const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * SCREENS_HEIGHT;
 const int BRANCHES_PER_SCREEN = 3;  // Adjust this for desired branch density
 const int TOTAL_BRANCHES = BRANCHES_PER_SCREEN * SCREENS_HEIGHT;
 
+const int NEST_SIZE = 64;
+const SDL_Color NEST_COLOR = {34, 139, 34, 255};  // Forest green
+
+
 #define TIMER_X (WINDOW_WIDTH - 200)
 #define TIMER_Y 20
 
@@ -126,6 +130,7 @@ struct GameState {
     float cameraY;  // Vertical camera offset
     float targetCameraY;  // Target position for smooth scrolling
     int currentEggSprite = 0;
+    GameObject nest;
 } g_GameState;
 
 // forward declarations
@@ -430,10 +435,17 @@ void InitGameObjects()
     // Generate branches and squirrels
     GenerateBranchesAndSquirrels();
 
+
+    // Initialize nest position at the top-middle of the screen
+    g_GameState.nest.x = (WINDOW_WIDTH - NEST_SIZE) / 2;
+    g_GameState.nest.y = 0;
+    g_GameState.nest.width = NEST_SIZE;
+    g_GameState.nest.height = NEST_SIZE;
+
     // Initialize egg position relative to floor squirrel
     g_GameState.egg = {
-        g_GameState.floorSquirrel.x + (defaultWidth - EGG_SIZE_X) / 2,
-        g_GameState.floorSquirrel.y - EGG_SIZE_Y,
+        g_GameState.nest.x + (NEST_SIZE - EGG_SIZE_X) / 2,  // Center egg on nest
+        g_GameState.nest.y, 
         EGG_SIZE_X,
         EGG_SIZE_Y,
         g_EggTexture,
@@ -593,6 +605,17 @@ void RenderBackground()
     }
 }
 
+void RenderNest()
+{
+    SDL_SetRenderDrawColor(g_Renderer, NEST_COLOR.r, NEST_COLOR.g, NEST_COLOR.b, NEST_COLOR.a);
+    SDL_Rect nestRect = {
+        static_cast<int>(g_GameState.nest.x),
+        static_cast<int>(g_GameState.nest.y - g_GameState.cameraY), // Account for camera position
+        g_GameState.nest.width,
+        g_GameState.nest.height};
+    SDL_RenderFillRect(g_Renderer, &nestRect);
+}
+
 void Render()
 {
     // Clear with a color (can be kept as fallback)
@@ -632,6 +655,9 @@ void Render()
 
     // Render instructions
     RenderInstructions();
+
+    // Render the nest
+    RenderNest();
 
     // Add before SDL_RenderPresent
     RenderTimer();
@@ -855,9 +881,15 @@ void UpdatePhysics()
             printf("Egg caught by floor squirrel!\n");
         }
 
+        SDL_Rect nestRect = {
+            static_cast<int>(g_GameState.nest.x),
+            static_cast<int>(g_GameState.nest.y),
+            g_GameState.nest.width,
+            g_GameState.nest.height
+        };
 
         // Check if egg reached the top - win condition
-        if (g_GameState.egg.y <= 0)
+        if (CheckCollision(eggRect, nestRect) )// g_GameState.egg.y <= 0)
         {
             if (g_TimerActive)  // Only save score once
             {
