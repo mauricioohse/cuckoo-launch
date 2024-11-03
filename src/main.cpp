@@ -20,8 +20,8 @@
 #define EGG_SPRITE_COUNT 3
 #define GRAVITY 0.5f
 #define TERMINAL_VELOCITY 30.0f
-#define STRENGTH_BAR_WIDTH 200
-#define STRENGTH_BAR_HEIGHT 20
+#define STRENGTH_BAR_WIDTH 10
+#define STRENGTH_BAR_HEIGHT 75
 #define STRENGTH_BAR_X 20
 #define STRENGTH_BAR_Y 550
 #define ANGLE_BAR_WIDTH 20
@@ -604,7 +604,7 @@ void HandleCollision(GameObject *squirrel)
 {
     // hacks for adjusting the egg on the tail
     int offset_y=-110, offset_x = 50;
-    if (squirrel->isLeftSide)        { offset_y=110; offset_x=0;}
+    if (squirrel->isLeftSide)        { offset_y=-110; offset_x=0;}
     if (squirrel == &g_GameState.floorSquirrel) {offset_y=-110;offset_x=0;}
 
     g_GameState.eggIsHeld = true;
@@ -818,22 +818,27 @@ void RenderControls()
 {
     if (g_GameState.eggIsHeld)
     {
+        // Calculate strength bar position relative to egg
+        int x_offset = g_GameState.activeSquirrel->isLeftSide ? -10 : EGG_SIZE_X + 20;
+        int strengthBarX = static_cast<int>(g_GameState.egg.x) - STRENGTH_BAR_WIDTH + x_offset; // 10 pixels gap
+        int strengthBarY = static_cast<int>(g_GameState.egg.y) - g_GameState.cameraY - STRENGTH_BAR_HEIGHT/2 + g_GameState.egg.height/2;
+
         // Draw strength bar background
         SDL_Rect strengthBarBg = {
-            STRENGTH_BAR_X,
-            STRENGTH_BAR_Y,
+            strengthBarX,
+            strengthBarY,
             STRENGTH_BAR_WIDTH,
             STRENGTH_BAR_HEIGHT
         };
         SDL_SetRenderDrawColor(g_Renderer, 100, 100, 100, 255);
         SDL_RenderFillRect(g_Renderer, &strengthBarBg);
 
-        // Draw strength bar fill
+        // Draw strength bar fill (from bottom to top)
         SDL_Rect strengthBarFill = {
-            STRENGTH_BAR_X,
-            STRENGTH_BAR_Y,
-            static_cast<int>(STRENGTH_BAR_WIDTH * g_GameState.strengthCharge),
-            STRENGTH_BAR_HEIGHT
+            strengthBarX,
+            strengthBarY + STRENGTH_BAR_HEIGHT * (1.0f - g_GameState.strengthCharge),  // Start from bottom
+            STRENGTH_BAR_WIDTH,
+            static_cast<int>(STRENGTH_BAR_HEIGHT * g_GameState.strengthCharge)
         };
         SDL_SetRenderDrawColor(g_Renderer, 
             g_GameState.isDepletingCharge ? 255 : 0,  // Red if depleting
@@ -850,7 +855,7 @@ void RenderControls()
             ANGLE_BAR_HEIGHT
         };
         SDL_SetRenderDrawColor(g_Renderer, 100, 100, 100, 255);
-        SDL_RenderFillRect(g_Renderer, &angleBarBg);
+        //SDL_RenderFillRect(g_Renderer, &angleBarBg);
 
         // Draw angle square
         SDL_Rect angleSquare = {
@@ -860,7 +865,7 @@ void RenderControls()
             ANGLE_SQUARE_SIZE
         };
         SDL_SetRenderDrawColor(g_Renderer, 255, 255, 0, 255);  // Yellow square
-        SDL_RenderFillRect(g_Renderer, &angleSquare);
+        //SDL_RenderFillRect(g_Renderer, &angleSquare);
     }
 }
 
