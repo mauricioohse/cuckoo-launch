@@ -10,7 +10,7 @@
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
-#define TREE_WIDTH 100
+#define TREE_WIDTH 75
 #define BRANCH_SPACING 150  // Vertical space between branches
 #define SQUIRREL_SCALE 0.6f  // Adjust this value to scale sprites (1.0f = original size, 0.5f = half size, 2.0f = double size)
 #define EGG_SIZE_SCALE 1.0f
@@ -268,7 +268,7 @@ void GenerateBranchesAndSquirrels()
     int defaultWidth = GetDefaultSquirrelWidth();
     int defaultHeight = GetDefaultSquirrelHeight();
 
-    float currentHeight = TOTAL_GAME_HEIGHT - WINDOW_HEIGHT*0.3f;  // Start above floor squirrel
+    float currentHeight = TOTAL_GAME_HEIGHT - WINDOW_HEIGHT*0.5f;  // Start above floor squirrel
     bool isLeft = false;  // always start with branch on the right
 
     while (currentHeight > 0)  // Generate until we reach the top
@@ -340,10 +340,10 @@ void InitGameObjects()
     int defaultWidth = GetDefaultSquirrelWidth();
     int defaultHeight = GetDefaultSquirrelHeight();
 
-    // Position floor squirrel at the bottom of the total height
+    // Position floor squirrel at the bottom of the total height plus an offset
     g_GameState.floorSquirrel = {
-        static_cast<float>(WINDOW_WIDTH / 2 - defaultWidth / 2),
-        TOTAL_GAME_HEIGHT - defaultHeight,
+        static_cast<float>(WINDOW_WIDTH / 2 - defaultWidth / 2) - 40,
+        TOTAL_GAME_HEIGHT - defaultHeight - 60,
         defaultWidth,
         defaultHeight,
         g_SquirrelTexture,
@@ -602,11 +602,16 @@ bool CheckCollision(const SDL_Rect& a, const SDL_Rect& b)
 
 void HandleCollision(GameObject *squirrel)
 {
+    // hacks for adjusting the egg on the tail
+    int offset_y=-110, offset_x = 50;
+    if (squirrel->isLeftSide)        { offset_y=110; offset_x=0;}
+    if (squirrel == &g_GameState.floorSquirrel) {offset_y=-110;offset_x=0;}
+
     g_GameState.eggIsHeld = true;
     g_GameState.eggVelocityX = 0;
     g_GameState.eggVelocityY = 0;
-    g_GameState.egg.y = squirrel->y - g_GameState.egg.height;
-    g_GameState.egg.x = squirrel->x + 
+    g_GameState.egg.y = squirrel->y + g_GameState.egg.height + offset_y;
+    g_GameState.egg.x = squirrel->x  + offset_x +
         (squirrel->spriteWidths[squirrel->currentSprite] - g_GameState.egg.width) / 2;
     g_GameState.activeSquirrel = squirrel;
     g_GameState.isLaunchingRight = g_GameState.activeSquirrel->isLeftSide;
@@ -733,7 +738,7 @@ void UpdatePhysics()
             g_GameState.floorSquirrel.spriteHeights[g_GameState.floorSquirrel.currentSprite]
         };
 
-        if (CheckCollision(eggRect, floorSquirrelRect))
+        if (CheckCollision(eggRect, floorSquirrelRect) && g_GameState.activeSquirrel != &g_GameState.floorSquirrel)
         {
             HandleCollision(&g_GameState.floorSquirrel);
             printf("Egg caught by floor squirrel!\n");
