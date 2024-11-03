@@ -12,7 +12,6 @@
 #define WINDOW_HEIGHT 600
 #define TREE_WIDTH 100
 #define BRANCH_SPACING 150  // Vertical space between branches
-#define SQUIRREL_SIZE 60
 #define EGG_SIZE_X 50
 #define EGG_SIZE_Y 75
 #define EGG_ANIMATION_SPEED 1.0f  // Adjust speed as needed, measured in seconds
@@ -228,6 +227,18 @@ bool InitSDL()
     return true;
 }
 
+int GetDefaultSquirrelWidth() {
+    int width, height;
+    SDL_QueryTexture(g_SquirrelTextures[0], nullptr, nullptr, &width, &height);
+    return width;
+}
+
+int GetDefaultSquirrelHeight() {
+    int width, height;
+    SDL_QueryTexture(g_SquirrelTextures[0], nullptr, nullptr, &width, &height);
+    return height;
+}
+
 void GenerateBranchesAndSquirrels()
 {
     // Clear existing branches and squirrels
@@ -236,6 +247,9 @@ void GenerateBranchesAndSquirrels()
 
     // Set random seed based on time
     srand(static_cast<unsigned>(time(nullptr)));
+        // Get default squirrel dimensions
+    int defaultWidth = GetDefaultSquirrelWidth();
+    int defaultHeight = GetDefaultSquirrelHeight();
 
     float currentHeight = TOTAL_GAME_HEIGHT - WINDOW_HEIGHT*0.3f;  // Start above floor squirrel
     bool isLeft = false;  // always start with branch on the right
@@ -266,10 +280,10 @@ void GenerateBranchesAndSquirrels()
 
         // Add squirrel (positioned at end of branch)
         GameObject squirrel = {
-            isLeft ? branchX + extension - SQUIRREL_SIZE : branchX,
-            currentHeight - SQUIRREL_SIZE,
-            SQUIRREL_SIZE,
-            SQUIRREL_SIZE,
+            isLeft ? branchX + extension - defaultWidth : branchX,
+            currentHeight - defaultHeight,
+            defaultWidth,
+            defaultHeight,
             g_SquirrelTexture,
             isLeft
         };
@@ -305,12 +319,16 @@ void InitGameObjects()
         false
     };
 
+    // Get default squirrel dimensions
+    int defaultWidth = GetDefaultSquirrelWidth();
+    int defaultHeight = GetDefaultSquirrelHeight();
+
     // Position floor squirrel at the bottom of the total height
     g_GameState.floorSquirrel = {
-        static_cast<float>(WINDOW_WIDTH / 2 - SQUIRREL_SIZE / 2),
-        TOTAL_GAME_HEIGHT - SQUIRREL_SIZE,  // Position at bottom of total height
-        SQUIRREL_SIZE,
-        SQUIRREL_SIZE,
+        static_cast<float>(WINDOW_WIDTH / 2 - defaultWidth / 2),
+        TOTAL_GAME_HEIGHT - defaultHeight,
+        defaultWidth,
+        defaultHeight,
         g_SquirrelTexture,
         true
     };
@@ -319,9 +337,9 @@ void InitGameObjects()
     // Generate branches and squirrels
     GenerateBranchesAndSquirrels();
 
-    // Initialize egg with floor squirrel
+    // Initialize egg position relative to floor squirrel
     g_GameState.egg = {
-        g_GameState.floorSquirrel.x + (g_GameState.floorSquirrel.width - EGG_SIZE_X) / 2,
+        g_GameState.floorSquirrel.x + (defaultWidth - EGG_SIZE_X) / 2,
         g_GameState.floorSquirrel.y - EGG_SIZE_Y,
         EGG_SIZE_X,
         EGG_SIZE_Y,
@@ -515,28 +533,27 @@ bool CheckCollision(const SDL_Rect& a, const SDL_Rect& b)
 
 void HandleCollision(GameObject *squirrel)
 {
-            g_GameState.eggIsHeld = true;
-            g_GameState.eggVelocityX = 0;
-            g_GameState.eggVelocityY = 0;
-            g_GameState.egg.y = squirrel->y - g_GameState.egg.height;
-            g_GameState.egg.x = squirrel->x + 
-                (squirrel->width - g_GameState.egg.width) / 2;
-            g_GameState.activeSquirrel = squirrel;
-            g_GameState.isLaunchingRight = g_GameState.activeSquirrel->isLeftSide;  // Sync launch direction
-            
-            // Reset control states
-            g_GameState.strengthCharge = 0.0f;
-            g_GameState.isCharging = false;
-            g_GameState.isDepletingCharge = false;
-            g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
-            g_GameState.angleSquareVelocity = 0.0f;
+    g_GameState.eggIsHeld = true;
+    g_GameState.eggVelocityX = 0;
+    g_GameState.eggVelocityY = 0;
+    g_GameState.egg.y = squirrel->y - g_GameState.egg.height;
+    g_GameState.egg.x = squirrel->x + 
+        (squirrel->spriteWidths[squirrel->currentSprite] - g_GameState.egg.width) / 2;
+    g_GameState.activeSquirrel = squirrel;
+    g_GameState.isLaunchingRight = g_GameState.activeSquirrel->isLeftSide;
+    
+    // Reset control states
+    g_GameState.strengthCharge = 0.0f;
+    g_GameState.isCharging = false;
+    g_GameState.isDepletingCharge = false;
+    g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
+    g_GameState.angleSquareVelocity = 0.0f;
 
-            
-            g_GameState.currentEggSprite = 0;  // Reset animation
-            g_EggAnimationTime = 0.0f;
-            squirrel->currentSprite = 1;  // Change to launch sprite
+    
+    g_GameState.currentEggSprite = 0;  // Reset animation
+    g_EggAnimationTime = 0.0f;
+    squirrel->currentSprite = 1;  // Change to launch sprite
 
-            
 }
 
 void UpdatePhysics()
@@ -615,8 +632,8 @@ void UpdatePhysics()
             SDL_Rect squirrelRect = {
                 static_cast<int>(squirrel.x),
                 static_cast<int>(squirrel.y),
-                squirrel.width,
-                squirrel.height
+                squirrel.spriteWidths[squirrel.currentSprite],
+                squirrel.spriteHeights[squirrel.currentSprite]
             };
 
             if (CheckCollision(eggRect, squirrelRect) && g_GameState.activeSquirrel != &squirrel)
@@ -643,8 +660,8 @@ void UpdatePhysics()
         SDL_Rect floorSquirrelRect = {
             static_cast<int>(g_GameState.floorSquirrel.x),
             static_cast<int>(g_GameState.floorSquirrel.y),
-            g_GameState.floorSquirrel.width,
-            g_GameState.floorSquirrel.height
+            g_GameState.floorSquirrel.spriteWidths[g_GameState.floorSquirrel.currentSprite],
+            g_GameState.floorSquirrel.spriteHeights[g_GameState.floorSquirrel.currentSprite]
         };
 
         if (CheckCollision(eggRect, floorSquirrelRect))
@@ -665,7 +682,7 @@ void UpdatePhysics()
                 g_WinAchieved = true;
                 // teleport to floor squirrel
                 g_GameState.egg.x = g_GameState.floorSquirrel.x + 
-                    (g_GameState.floorSquirrel.width - g_GameState.egg.width) / 2;
+                    (g_GameState.floorSquirrel.spriteWidths[g_GameState.floorSquirrel.currentSprite] - g_GameState.egg.width) / 2;
                 g_GameState.egg.y = g_GameState.floorSquirrel.y - g_GameState.egg.height;
                 g_GameState.eggVelocityX = 0;
                 g_GameState.eggVelocityY = 0;
@@ -836,7 +853,7 @@ void ResetLevel()
     
     // Reset egg to floor squirrel
     g_GameState.egg.x = g_GameState.floorSquirrel.x + 
-        (g_GameState.floorSquirrel.width - g_GameState.egg.width) / 2;
+        (g_GameState.floorSquirrel.spriteWidths[g_GameState.floorSquirrel.currentSprite] - g_GameState.egg.width) / 2;
     g_GameState.egg.y = g_GameState.floorSquirrel.y - g_GameState.egg.height;
     g_GameState.eggVelocityX = 0;
     g_GameState.eggVelocityY = 0;
@@ -1046,7 +1063,7 @@ int main(int argc, char* argv[])
                         {
                             // Teleport above the first squirrel
                             const auto& squirrel = g_GameState.squirrels[0];
-                            g_GameState.egg.x = squirrel.x + (squirrel.width - g_GameState.egg.width) / 2;
+                            g_GameState.egg.x = squirrel.x + (squirrel.spriteWidths[squirrel.currentSprite] - g_GameState.egg.width) / 2;
                             g_GameState.egg.y = squirrel.y - g_GameState.egg.height - 50;  // 50 pixels above
                             g_GameState.eggVelocityY = 0;
                             g_GameState.eggIsHeld = false;
