@@ -12,7 +12,7 @@
 #define WINDOW_HEIGHT 600
 #define TREE_WIDTH 100
 #define BRANCH_SPACING 150  // Vertical space between branches
-#define SQUIRREL_SCALE 0.8f  // Adjust this value to scale sprites (1.0f = original size, 0.5f = half size, 2.0f = double size)
+#define SQUIRREL_SCALE 0.6f  // Adjust this value to scale sprites (1.0f = original size, 0.5f = half size, 2.0f = double size)
 #define EGG_SIZE_SCALE 1.0f
 #define EGG_SIZE_X (int)(50*EGG_SIZE_SCALE)
 #define EGG_SIZE_Y (int)(75*EGG_SIZE_SCALE)
@@ -526,9 +526,9 @@ void Render()
     // Render background first
     RenderBackground();
 
-    // Render trees
-    RenderGameObject(g_GameState.leftTree);
-    RenderGameObject(g_GameState.rightTree);
+    // Render trees - currently not drawing, used only for debug
+   // RenderGameObject(g_GameState.leftTree);
+    //RenderGameObject(g_GameState.rightTree);
 
     // Render branches first (behind squirrels)
     for (const auto& branch : g_GameState.branches)
