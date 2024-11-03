@@ -39,9 +39,12 @@
 
 #define MIN_BRANCH_SPACING (WINDOW_HEIGHT * 0.1f)  // Minimum vertical gap between branches
 #define MAX_BRANCH_SPACING (WINDOW_HEIGHT * 0.5f)  // Maximum vertical gap between branches
-#define MIN_BRANCH_EXTENSION 125.0f   // Minimum distance branch extends from tree
+#define MIN_BRANCH_EXTENSION 219.0f   // Minimum distance branch extends from tree
 #define MAX_BRANCH_EXTENSION 350.0f  // Maximum distance branch extends from tree
-#define BRANCH_HEIGHT 30             // Height of branch texture
+#define BRANCH_HEIGHT 200             // Height of branch texture
+
+#define NUM_BRANCH_TYPES 3
+#define POSITIONS_PER_BRANCH 2
 
 #define ARROW_WIDTH 40
 #define ARROW_HEIGHT 15
@@ -52,10 +55,9 @@
 #define INSTRUCTION_FONT_SIZE 20
 #define INSTRUCTION_Y 50  // Adjust this value to position the text where you want
 
-const int SCREENS_HEIGHT = 10;
-const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * SCREENS_HEIGHT;
-const int BRANCHES_PER_SCREEN = 3;  // Adjust this for desired branch density
-const int TOTAL_BRANCHES = BRANCHES_PER_SCREEN * SCREENS_HEIGHT;
+const int TOTAL_HEIGHT_IN_SCREENS = 10;
+const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * TOTAL_HEIGHT_IN_SCREENS;
+
 
 const int NEST_SIZE = 64;
 const SDL_Color NEST_COLOR = {34, 139, 34, 255};  // Forest green
@@ -96,6 +98,7 @@ SDL_Texture* g_SquirrelTextures[SQUIRREL_SPRITE_COUNT] = {nullptr};
 SDL_Texture* g_BackgroundBase = nullptr;
 SDL_Texture* g_BackgroundModular = nullptr;
 SDL_Texture* g_BackgroundTop = nullptr;
+SDL_Texture* g_BranchTextures[NUM_BRANCH_TYPES] = {nullptr};
 
 Mix_Chunk* g_CrunchSound = nullptr;
 Mix_Chunk* g_WinSound = nullptr;
@@ -110,6 +113,8 @@ struct GameObject {
     int currentSprite = 0;
     int spriteWidths[SQUIRREL_SPRITE_COUNT] = {0};
     int spriteHeights[SQUIRREL_SPRITE_COUNT] = {0};
+    int branchType;      // For branches: which type of branch (0-2)
+    int positionIndex;   // For squirrels: which position on the branch (0-1)
 };
 
 struct GameState {
@@ -136,6 +141,33 @@ struct GameState {
     bool isInNest;  // New flag to track if egg is in starting position
     bool isFirstFall = 1;
 } g_GameState;
+
+// Define the relative positions for squirrels on each branch type
+struct BranchPosition {
+    float x;  // Relative X position from branch start
+    float y;  // Relative Y position from branch top
+};
+
+// Array to store possible positions for each branch type
+// You'll need to fill these values based on your branch PNGs
+BranchPosition g_BranchPositions[NUM_BRANCH_TYPES][POSITIONS_PER_BRANCH] = {
+    // Branch Type 1 positions
+    {
+        {.0f, 40.0f},    // Fill with actual values for position 1
+        {100.0f, 45.0f}     // Fill with actual values for position 2
+    },
+    // Branch Type 2 positions
+    {
+        {40.0f, 40.0f},    // Fill with actual values for position 1
+        {140.0f, 50.0f}     // Fill with actual values for position 2
+    },
+    // Branch Type 3 positions
+    {
+        {60.0f, 30.0f},    // Fill with actual values for position 1
+        {80.0f, 70.0f}     // Fill with actual values for position 2
+    }
+};
+
 
 // forward declarations
 void RenderControls();
@@ -327,6 +359,19 @@ bool InitSDL()
     // Optionally adjust music volume (0-128)
     Mix_VolumeMusic(MIX_MAX_VOLUME / 2);  // 50% volume - adjust as needed
 
+    // Load branch textures
+    g_BranchTextures[0] = LoadTexture("assets/branch/branch1.png");
+    g_BranchTextures[1] = LoadTexture("assets/branch/branch2.png");
+    g_BranchTextures[2] = LoadTexture("assets/branch/branch3.png");
+
+    // Check if all branch textures loaded successfully
+    for (int i = 0; i < NUM_BRANCH_TYPES; i++) {
+        if (!g_BranchTextures[i]) {
+            printf("Failed to load branch texture %d\n", i + 1);
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -349,7 +394,7 @@ void GenerateBranchesAndSquirrels()
     g_GameState.squirrels.clear();
 
     // Set random seed based on time
-    srand(static_cast<unsigned>(time(nullptr)));
+    srand(2); //static_cast<unsigned>(time(nullptr)));
         // Get default squirrel dimensions
     int defaultWidth = GetDefaultSquirrelWidth();
     int defaultHeight = GetDefaultSquirrelHeight();
@@ -357,7 +402,7 @@ void GenerateBranchesAndSquirrels()
     float currentHeight = TOTAL_GAME_HEIGHT - WINDOW_HEIGHT*0.5f;  // Start above floor squirrel
     bool isLeft = false;  // always start with branch on the right
 
-    while (currentHeight > 0)  // Generate until we reach the top
+    while (currentHeight > 100)  // Generate until we reach the top
     {
         // Random height spacing for this branch
         float spacing = MIN_BRANCH_SPACING + 
@@ -368,27 +413,46 @@ void GenerateBranchesAndSquirrels()
             static_cast<float>(rand()) / RAND_MAX * (MAX_BRANCH_EXTENSION - MIN_BRANCH_EXTENSION);
 
         // Calculate branch position
-        float branchX = isLeft ? TREE_WIDTH : WINDOW_WIDTH - TREE_WIDTH - extension;
+        float branchX = !isLeft ? TREE_WIDTH : WINDOW_WIDTH - TREE_WIDTH - extension;
         
+        // Randomly select branch type and position
+        int branchType = rand() % NUM_BRANCH_TYPES;
+        int positionIndex = rand() % POSITIONS_PER_BRANCH;
+
         // Add branch
         GameObject branch = {
             branchX,
             currentHeight,
             static_cast<int>(extension),
             BRANCH_HEIGHT,
-            g_BranchTexture,
-            isLeft
+            g_BranchTextures[branchType],
+            isLeft,
+            branchType  // Add branch type
         };
         g_GameState.branches.push_back(branch);
 
-        // Add squirrel (positioned at end of branch)
+        // Calculate squirrel position based on branch type and chosen position
+        float squirrelX = branchX + g_BranchPositions[branchType][positionIndex].x;
+        float squirrelY = currentHeight + g_BranchPositions[branchType][positionIndex].y;
+
+        if (!isLeft) {
+            // Adjust X position for right-side branches
+            squirrelX = branchX + extension - defaultWidth - g_BranchPositions[branchType][positionIndex].x;
+        }
+
+        // Add squirrel
         GameObject squirrel = {
-            isLeft ? branchX + extension - defaultWidth : branchX,
-            currentHeight - defaultHeight,
+            squirrelX,
+            squirrelY,
             defaultWidth,
             defaultHeight,
             g_SquirrelTexture,
-            isLeft
+            !isLeft,
+            0,  // currentSprite
+            {0},  // spriteWidths
+            {0},  // spriteHeights
+            -1,   // branchType (not used for squirrels)
+            positionIndex
         };
         LoadSquirrelSpriteDimensions(squirrel);
         g_GameState.squirrels.push_back(squirrel);
@@ -512,6 +576,11 @@ void RenderGameObject(const GameObject& obj)
                         nullptr, // rotate around center
                         flip);  // flip horizontally if needed
     }
+    else if (&obj >= &g_GameState.branches.front() && &obj <= &g_GameState.branches.back()) {
+        // It's a branch, use the appropriate texture
+        SDL_RendererFlip flip = (obj.isLeftSide) ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+        SDL_RenderCopyEx(g_Renderer, g_BranchTextures[obj.branchType], nullptr, &destRect, 0, nullptr, flip);
+    }
     else
     {
         SDL_Rect dest = {
@@ -580,7 +649,7 @@ void RenderBackground()
 
     // Clamp to valid range
     startScreen = std::max(0, startScreen);
-    endScreen = std::min(SCREENS_HEIGHT - 1, endScreen);
+    endScreen = std::min(TOTAL_HEIGHT_IN_SCREENS - 1, endScreen);
 
     for (int screen = startScreen; screen <= endScreen; screen++)
     {
@@ -598,7 +667,7 @@ void RenderBackground()
             // First screen uses base background
             bgTexture = g_BackgroundTop;
         }
-        else if (screen == SCREENS_HEIGHT - 1) {
+        else if (screen == TOTAL_HEIGHT_IN_SCREENS - 1) {
             // Last screen uses top background
             bgTexture = g_BackgroundBase;
         }
@@ -722,6 +791,10 @@ void CleanUp()
     }
     
     Mix_Quit();
+
+    for (int i = 0; i < NUM_BRANCH_TYPES; i++) {
+        SDL_DestroyTexture(g_BranchTextures[i]);
+    }
 }
 
 void PlayRandomLaunchSound()
