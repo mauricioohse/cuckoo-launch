@@ -13,8 +13,8 @@
 #define TREE_WIDTH 100
 #define BRANCH_SPACING 150  // Vertical space between branches
 #define SQUIRREL_SIZE 60
-#define EGG_SIZE_X 40
-#define EGG_SIZE_Y 60
+#define EGG_SIZE_X 50
+#define EGG_SIZE_Y 75
 #define EGG_ANIMATION_SPEED 1.0f  // Adjust speed as needed, measured in seconds
 #define EGG_SPRITE_COUNT 3
 #define GRAVITY 0.5f
@@ -70,11 +70,17 @@ Uint32 g_lastElapsedTime = 0;
 SDL_Texture* g_EggTextures[EGG_SPRITE_COUNT] = {nullptr};
 float g_EggAnimationTime = 0.0f;
 
+#define SQUIRREL_SPRITE_COUNT 2
+SDL_Texture* g_SquirrelTextures[SQUIRREL_SPRITE_COUNT] = {nullptr};
+
 struct GameObject {
     float x, y;
     int width, height;
     SDL_Texture* texture;
     bool isLeftSide;  // Used for squirrels to determine which side they're on
+    int currentSprite = 0;
+    int spriteWidths[SQUIRREL_SPRITE_COUNT] = {0};
+    int spriteHeights[SQUIRREL_SPRITE_COUNT] = {0};
 };
 
 struct GameState {
@@ -105,6 +111,7 @@ void RenderTimer();
 void ResetTimer();
 void SaveScore(Uint32 time);
 void RenderWinMessage();
+void LoadSquirrelSpriteDimensions(GameObject& squirrel);
 
 SDL_Texture* LoadTexture(const char* path)
 {    
@@ -204,6 +211,20 @@ bool InitSDL()
         }
     }
 
+    // Load squirrel sprites
+    g_SquirrelTextures[0] = LoadTexture("assets/squirrel/squirrel_without_egg_1.png");
+    g_SquirrelTextures[1] = LoadTexture("assets/squirrel/squirrel_launch_no_egg_2.png");
+
+    // Check if all textures loaded successfully
+    for (int i = 0; i < SQUIRREL_SPRITE_COUNT; i++)
+    {
+        if (!g_SquirrelTextures[i])
+        {
+            printf("Failed to load squirrel sprite %d\n", i + 1);
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -236,7 +257,7 @@ void GenerateBranchesAndSquirrels()
         GameObject branch = {
             branchX,
             currentHeight,
-            extension,
+            static_cast<int>(extension),
             BRANCH_HEIGHT,
             g_BranchTexture,
             isLeft
@@ -252,6 +273,7 @@ void GenerateBranchesAndSquirrels()
             g_SquirrelTexture,
             isLeft
         };
+        LoadSquirrelSpriteDimensions(squirrel);
         g_GameState.squirrels.push_back(squirrel);
 
         // Update for next iteration
@@ -292,6 +314,7 @@ void InitGameObjects()
         g_SquirrelTexture,
         true
     };
+    LoadSquirrelSpriteDimensions(g_GameState.floorSquirrel);
 
     // Generate branches and squirrels
     GenerateBranchesAndSquirrels();
@@ -322,18 +345,37 @@ void InitGameObjects()
 
 void RenderGameObject(const GameObject& obj)
 {
+    // Use the current sprite's dimensions for squirrels
+    int renderWidth = obj.width;
+    int renderHeight = obj.height;
+    
+    if (&obj == &g_GameState.floorSquirrel || 
+        (&obj >= &g_GameState.squirrels.front() && &obj <= &g_GameState.squirrels.back()))
+    {
+        renderWidth = obj.spriteWidths[obj.currentSprite];
+        renderHeight = obj.spriteHeights[obj.currentSprite];
+    }
+
+    SDL_Rect destRect = {
+        static_cast<int>(obj.x),
+        static_cast<int>(obj.y - g_GameState.cameraY),
+        renderWidth,
+        renderHeight
+    };
+
     if (&obj == &g_GameState.egg)
     {
-        SDL_Rect destRect = {
-            static_cast<int>(obj.x),
-            static_cast<int>(obj.y - g_GameState.cameraY),
-            obj.width,
-            obj.height
-        };
-
         SDL_RenderCopy(g_Renderer, 
                       g_EggTextures[g_GameState.currentEggSprite], 
                       nullptr, 
+                      &destRect);
+    }
+    else if (&obj == &g_GameState.floorSquirrel || 
+             (&obj >= &g_GameState.squirrels.front() && &obj <= &g_GameState.squirrels.back()))
+    {
+        SDL_RenderCopy(g_Renderer,
+                      g_SquirrelTextures[obj.currentSprite],
+                      nullptr,
                       &destRect);
     }
     else
@@ -345,7 +387,6 @@ void RenderGameObject(const GameObject& obj)
             obj.height
         };
         
-        // Only render if object is visible on screen
         if (dest.y + dest.h >= 0 && dest.y <= WINDOW_HEIGHT)
         {
             SDL_RendererFlip flip = (obj.texture == g_SquirrelTexture && !obj.isLeftSide) 
@@ -456,6 +497,12 @@ void CleanUp()
     {
         SDL_DestroyTexture(g_EggTextures[i]);
     }
+
+    // Cleanup squirrel textures
+    for (int i = 0; i < SQUIRREL_SPRITE_COUNT; i++)
+    {
+        SDL_DestroyTexture(g_SquirrelTextures[i]);
+    }
 }
 
 bool CheckCollision(const SDL_Rect& a, const SDL_Rect& b)
@@ -487,6 +534,9 @@ void HandleCollision(GameObject *squirrel)
             
             g_GameState.currentEggSprite = 0;  // Reset animation
             g_EggAnimationTime = 0.0f;
+            squirrel->currentSprite = 1;  // Change to launch sprite
+
+            
 }
 
 void UpdatePhysics()
@@ -725,6 +775,10 @@ void RenderControls()
 
 void LaunchEgg()
 {
+    if (g_GameState.activeSquirrel)
+    {
+        g_GameState.activeSquirrel->currentSprite = 0;  // Change back to normal sprite
+    }
     // Calculate angle (0 at bottom, PI/2 at top)
     float normalizedY = (ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE - g_GameState.angleSquareY) 
                      / (ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE);
@@ -937,6 +991,16 @@ void UpdateEggAnimation(float deltaTime)
                oldSprite, 
                g_GameState.currentEggSprite,
                g_GameState.eggIsHeld ? "held" : "not held");
+    }
+}
+
+// First, move the sprite dimension loading to a separate function
+void LoadSquirrelSpriteDimensions(GameObject& squirrel) {
+    for (int i = 0; i < SQUIRREL_SPRITE_COUNT; i++) {
+        int width, height;
+        SDL_QueryTexture(g_SquirrelTextures[i], nullptr, nullptr, &width, &height);
+        squirrel.spriteWidths[i] = width;
+        squirrel.spriteHeights[i] = height;
     }
 }
 
