@@ -421,6 +421,25 @@ bool CheckCollision(const SDL_Rect& a, const SDL_Rect& b)
             a.y + a.h > b.y);
 }
 
+void HandleCollision(GameObject *squirrel)
+{
+            g_GameState.eggIsHeld = true;
+            g_GameState.eggVelocityX = 0;
+            g_GameState.eggVelocityY = 0;
+            g_GameState.egg.y = squirrel->y - g_GameState.egg.height;
+            g_GameState.egg.x = squirrel->x + 
+                (squirrel->width - g_GameState.egg.width) / 2;
+            g_GameState.activeSquirrel = squirrel;
+            g_GameState.isLaunchingRight = g_GameState.activeSquirrel->isLeftSide;  // Sync launch direction
+            
+            // Reset control states
+            g_GameState.strengthCharge = 0.0f;
+            g_GameState.isCharging = false;
+            g_GameState.isDepletingCharge = false;
+            g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
+            g_GameState.angleSquareVelocity = 0.0f;
+}
+
 void UpdatePhysics()
 {
     if (!g_GameState.eggIsHeld)
@@ -503,21 +522,7 @@ void UpdatePhysics()
 
             if (CheckCollision(eggRect, squirrelRect) && g_GameState.activeSquirrel != &squirrel)
             {
-                g_GameState.eggIsHeld = true;
-                g_GameState.eggVelocityX = 0;
-                g_GameState.eggVelocityY = 0;
-                g_GameState.egg.y = squirrel.y - g_GameState.egg.height;
-                g_GameState.egg.x = squirrel.x + (squirrel.width - g_GameState.egg.width) / 2;
-                g_GameState.activeSquirrel = &squirrel;
-                g_GameState.isLaunchingRight = g_GameState.activeSquirrel->isLeftSide;  // Sync launch direction
-                
-                // Reset control states when caught
-                g_GameState.strengthCharge = 0.0f;
-                g_GameState.isCharging = false;
-                g_GameState.isDepletingCharge = false;
-                g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
-                g_GameState.angleSquareVelocity = 0.0f;
-                
+                HandleCollision(&squirrel);
                 printf("Egg caught by squirrel!\n");
                 break;
             }
@@ -529,26 +534,7 @@ void UpdatePhysics()
             g_GameState.egg.x > WINDOW_WIDTH)
         {
             printf("Egg missed - giving to floor squirrel\n");
-            
-            // Position egg with floor squirrel
-            g_GameState.egg.x = g_GameState.floorSquirrel.x + 
-                (g_GameState.floorSquirrel.width - g_GameState.egg.width) / 2;
-            g_GameState.egg.y = g_GameState.floorSquirrel.y - g_GameState.egg.height;
-            
-            g_GameState.eggVelocityX = 0;
-            g_GameState.eggVelocityY = 0;
-            g_GameState.eggIsHeld = true;
-            
-            // Reset control states
-            g_GameState.strengthCharge = 0.0f;
-            g_GameState.isCharging = false;
-            g_GameState.isDepletingCharge = false;
-            g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
-            g_GameState.angleSquareVelocity = 0.0f;
-            g_GameState.isLaunchingRight = g_GameState.floorSquirrel.isLeftSide;
-
-            
-            g_GameState.activeSquirrel = &g_GameState.floorSquirrel;
+            HandleCollision(&g_GameState.floorSquirrel);
 
             // reset timer
             ResetTimer();
@@ -564,22 +550,7 @@ void UpdatePhysics()
 
         if (CheckCollision(eggRect, floorSquirrelRect))
         {
-            g_GameState.eggIsHeld = true;
-            g_GameState.eggVelocityX = 0;
-            g_GameState.eggVelocityY = 0;
-            g_GameState.egg.y = g_GameState.floorSquirrel.y - g_GameState.egg.height;
-            g_GameState.egg.x = g_GameState.floorSquirrel.x + 
-                (g_GameState.floorSquirrel.width - g_GameState.egg.width) / 2;
-            g_GameState.activeSquirrel = &g_GameState.floorSquirrel;
-            g_GameState.isLaunchingRight = g_GameState.activeSquirrel->isLeftSide;  // Sync launch direction
-            
-            // Reset control states
-            g_GameState.strengthCharge = 0.0f;
-            g_GameState.isCharging = false;
-            g_GameState.isDepletingCharge = false;
-            g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
-            g_GameState.angleSquareVelocity = 0.0f;
-            
+            HandleCollision(&g_GameState.floorSquirrel);
             printf("Egg caught by floor squirrel!\n");
         }
 
