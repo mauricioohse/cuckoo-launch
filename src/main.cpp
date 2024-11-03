@@ -29,7 +29,7 @@
 #define ANGLE_SQUARE_SIZE 15
 #define ANGLE_GRAVITY 0.5f
 #define ANGLE_JUMP_POWER 8.0f
-#define MAX_LAUNCH_POWER 20.0f   // Maximum launch velocity
+#define LAUNCH_POWER_SCALE 20.0f
 #define PI 3.14159265359f
 
 #define MIN_BRANCH_SPACING (WINDOW_HEIGHT * 0.1f)  // Minimum vertical gap between branches
@@ -809,7 +809,7 @@ void LaunchEgg()
     float angle = normalizedY * PI / 2;  // Convert to radians (0 to PI/2)
 
     // Calculate launch power
-    float power = MAX_LAUNCH_POWER * g_GameState.strengthCharge;
+    float power = LAUNCH_POWER_SCALE * g_GameState.strengthCharge;
 
     // Calculate velocities using trigonometry
     if (g_GameState.isLaunchingRight) {
@@ -1142,7 +1142,7 @@ int main(int argc, char* argv[])
         UpdateEggAnimation(deltaTime);  // Add this line
         Render();
 
-        // SDL_Delay(100);  // Sleep for 100ms (0.1 seconds)
+        // SDL_Delay(50);  // Sleep for x ms
     }
 
     CleanUp();
