@@ -17,7 +17,7 @@
 #define EGG_SIZE_SCALE 1.0f
 #define EGG_SIZE_X (int)(50*EGG_SIZE_SCALE)
 #define EGG_SIZE_Y (int)(75*EGG_SIZE_SCALE)
-#define EGG_ANIMATION_SPEED 1.0f  // Adjust speed as needed, measured in seconds
+#define EGG_ANIMATION_SPEED 0.7f  // Adjust speed as needed, measured in seconds
 #define EGG_SPRITE_COUNT 3
 #define GRAVITY 0.5f
 #define TERMINAL_VELOCITY 30.0f
@@ -93,6 +93,7 @@ SDL_Texture* g_BackgroundTop = nullptr;
 
 Mix_Chunk* g_CrunchSound = nullptr;
 Mix_Chunk* g_WinSound = nullptr;
+Mix_Music* g_BackgroundMusic = nullptr;
 Mix_Chunk* g_LaunchSounds[NUM_LAUNCH_SOUNDS] = {nullptr};
 
 struct GameObject {
@@ -298,6 +299,23 @@ bool InitSDL()
             return false;
         }
     }
+
+    g_BackgroundMusic = Mix_LoadMUS("assets/audio/550258__klankbeeld__calm-forest-nov-oisterwijk-nl-02-201127_0208.wav");
+    if (g_BackgroundMusic == nullptr)
+    {
+        printf("Failed to load background music! SDL_mixer Error: %s\n", Mix_GetError());
+        return false;
+    }
+
+    // Start playing the music and loop indefinitely (-1)
+    if (Mix_PlayMusic(g_BackgroundMusic, -1) == -1)
+    {
+        printf("Failed to play background music! SDL_mixer Error: %s\n", Mix_GetError());
+        return false;
+    }
+
+    // Optionally adjust music volume (0-128)
+    Mix_VolumeMusic(MIX_MAX_VOLUME / 2);  // 50% volume - adjust as needed
 
     return true;
 }
