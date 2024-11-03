@@ -12,8 +12,10 @@
 #define WINDOW_HEIGHT 600
 #define TREE_WIDTH 100
 #define BRANCH_SPACING 150  // Vertical space between branches
-#define EGG_SIZE_X 50
-#define EGG_SIZE_Y 75
+#define SQUIRREL_SCALE 0.8f  // Adjust this value to scale sprites (1.0f = original size, 0.5f = half size, 2.0f = double size)
+#define EGG_SIZE_SCALE 1.0f
+#define EGG_SIZE_X (int)(50*EGG_SIZE_SCALE)
+#define EGG_SIZE_Y (int)(75*EGG_SIZE_SCALE)
 #define EGG_ANIMATION_SPEED 1.0f  // Adjust speed as needed, measured in seconds
 #define EGG_SPRITE_COUNT 3
 #define GRAVITY 0.5f
@@ -41,7 +43,7 @@
 #define ARROW_WIDTH 40
 #define ARROW_HEIGHT 15
 
-const int SCREENS_HEIGHT = 10;
+const int SCREENS_HEIGHT = 3;
 const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * SCREENS_HEIGHT;
 const int BRANCHES_PER_SCREEN = 3;  // Adjust this for desired branch density
 const int TOTAL_BRANCHES = BRANCHES_PER_SCREEN * SCREENS_HEIGHT;
@@ -72,7 +74,10 @@ float g_EggAnimationTime = 0.0f;
 #define SQUIRREL_SPRITE_COUNT 2
 SDL_Texture* g_SquirrelTextures[SQUIRREL_SPRITE_COUNT] = {nullptr};
 
-#define SQUIRREL_SCALE 0.5f  // Adjust this value to scale sprites (1.0f = original size, 0.5f = half size, 2.0f = double size)
+// Add to global variables section
+SDL_Texture* g_BackgroundBase = nullptr;
+SDL_Texture* g_BackgroundModular = nullptr;
+SDL_Texture* g_BackgroundTop = nullptr;
 
 struct GameObject {
     float x, y;
@@ -224,6 +229,16 @@ bool InitSDL()
             printf("Failed to load squirrel sprite %d\n", i + 1);
             return false;
         }
+    }
+
+    // Load background textures
+    g_BackgroundBase = LoadTexture("assets/background/bg_base_1.png");
+    g_BackgroundModular = LoadTexture("assets/background/bg_modular_2.png");
+    g_BackgroundTop = LoadTexture("assets/background/bg_top_3.png");
+
+    if (!g_BackgroundBase || !g_BackgroundModular || !g_BackgroundTop) {
+        printf("Failed to load background textures!\n");
+        return false;
     }
 
     return true;
@@ -463,10 +478,53 @@ void RenderArrow()
     );
 }
 
+void RenderBackground()
+{
+    // Calculate how many screens are visible based on camera position
+    int startScreen = static_cast<int>(g_GameState.cameraY / WINDOW_HEIGHT);
+    int endScreen = static_cast<int>((g_GameState.cameraY + WINDOW_HEIGHT) / WINDOW_HEIGHT) + 1;
+
+    // Clamp to valid range
+    startScreen = std::max(0, startScreen);
+    endScreen = std::min(SCREENS_HEIGHT - 1, endScreen);
+
+    for (int screen = startScreen; screen <= endScreen; screen++)
+    {
+        // screen 0 is the topmost screen, endScreen is the bottom screen
+        SDL_Rect destRect = {
+            0,
+            screen * WINDOW_HEIGHT - static_cast<int>(g_GameState.cameraY),
+            WINDOW_WIDTH,
+            WINDOW_HEIGHT
+        };
+
+        // Choose which background to render based on screen position
+        SDL_Texture* bgTexture;
+        if (screen == 0) {
+            // First screen uses base background
+            bgTexture = g_BackgroundTop;
+        }
+        else if (screen == SCREENS_HEIGHT - 1) {
+            // Last screen uses top background
+            bgTexture = g_BackgroundBase;
+        }
+        else {
+            // All other screens use modular background
+            bgTexture = g_BackgroundModular;
+        }
+
+        SDL_RenderCopy(g_Renderer, bgTexture, nullptr, &destRect);
+    }
+}
+
 void Render()
 {
+    // Clear with a color (can be kept as fallback)
     SDL_SetRenderDrawColor(g_Renderer, 135, 206, 235, 255);  // Sky blue background
     SDL_RenderClear(g_Renderer);
+
+    // Render background first
+    RenderBackground();
 
     // Render trees
     RenderGameObject(g_GameState.leftTree);
@@ -528,6 +586,10 @@ void CleanUp()
     {
         SDL_DestroyTexture(g_SquirrelTextures[i]);
     }
+
+    SDL_DestroyTexture(g_BackgroundBase);
+    SDL_DestroyTexture(g_BackgroundModular);
+    SDL_DestroyTexture(g_BackgroundTop);
 }
 
 bool CheckCollision(const SDL_Rect& a, const SDL_Rect& b)
@@ -940,8 +1002,8 @@ void RenderTimer()
     SDL_DestroyTexture(texture);
 
     // Debug texture info
-    printf("Timer texture info - S %s, Position: (%d, %d), Size: (%d, %d)\n",
-           ss.str().c_str(), timerRect.x, timerRect.y, timerRect.w, timerRect.h);
+    // printf("Timer texture info - S %s, Position: (%d, %d), Size: (%d, %d)\n",
+    //        ss.str().c_str(), timerRect.x, timerRect.y, timerRect.w, timerRect.h);
 }
 
 void SaveScore(Uint32 time)
