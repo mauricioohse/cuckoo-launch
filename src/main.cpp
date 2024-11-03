@@ -87,7 +87,7 @@ struct GameState {
     float angleSquareVelocity;
     GameObject floorSquirrel;  // New floor squirrel
     bool isLaunchingRight;  // Direction flag
-    GameObject* activeSquirrel;  // Pointer to squirrel currently holding egg
+    GameObject* activeSquirrel = nullptr;  // Pointer to squirrel currently holding egg
     float cameraY;  // Vertical camera offset
     float targetCameraY;  // Target position for smooth scrolling
 } g_GameState;
@@ -501,7 +501,7 @@ void UpdatePhysics()
                 squirrel.height
             };
 
-            if (CheckCollision(eggRect, squirrelRect))
+            if (CheckCollision(eggRect, squirrelRect) && g_GameState.activeSquirrel != &squirrel)
             {
                 g_GameState.eggIsHeld = true;
                 g_GameState.eggVelocityX = 0;
@@ -546,6 +546,9 @@ void UpdatePhysics()
             g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
             g_GameState.angleSquareVelocity = 0.0f;
             g_GameState.isLaunchingRight = g_GameState.floorSquirrel.isLeftSide;
+
+            
+            g_GameState.activeSquirrel = &g_GameState.floorSquirrel;
 
             // reset timer
             ResetTimer();
@@ -734,6 +737,7 @@ void LaunchEgg()
             g_TimerActive = true;
             g_WinAchieved = false;
         }
+    //g_GameState.activeSquirrel = nullptr;  // Clear active squirrel
 }
 
 void UpdateCamera()
