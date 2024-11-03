@@ -24,6 +24,7 @@
 #define STRENGTH_BAR_HEIGHT 75
 #define STRENGTH_BAR_X 20
 #define STRENGTH_BAR_Y 550
+#define STRENGTH_CHARGE_RATE 0.03f
 #define ANGLE_BAR_WIDTH 20
 #define ANGLE_BAR_HEIGHT 200
 #define ANGLE_BAR_X 240
@@ -786,7 +787,7 @@ void UpdateControls()
     // Update strength bar
     if (g_GameState.isCharging && !g_GameState.isDepletingCharge)
     {
-        g_GameState.strengthCharge += 0.01f;  // Adjust speed as needed
+        g_GameState.strengthCharge += STRENGTH_CHARGE_RATE;  // Adjust speed as needed
         if (g_GameState.strengthCharge >= 1.0f)
         {
             g_GameState.strengthCharge = 1.0f;
@@ -795,7 +796,7 @@ void UpdateControls()
     }
     else if (g_GameState.isDepletingCharge)
     {
-        g_GameState.strengthCharge -= 0.02f;  // Adjust speed as needed
+        g_GameState.strengthCharge -= STRENGTH_CHARGE_RATE;  // Adjust speed as needed
         if (g_GameState.strengthCharge <= 0.0f)
         {
             // Instead of dropping the egg, restart the charge cycle
@@ -1057,7 +1058,7 @@ void RenderWinMessage()
     // Format win message
     std::stringstream ss;
     ss << "Final Time: " << std::setfill('0') << std::setw(2) << minutes 
-       << ":" << std::setfill('0') << std::setw(2) << seconds 
+       << ":" << std::setfill('0') << std::setw(2) << seconds  << "."
        << std::setfill('0') << std::setw(2) << (milliseconds / 10);
 
     // Create surface
@@ -1241,10 +1242,10 @@ int main(int argc, char* argv[])
                         quit = true;
                         break;
                     case SDLK_SPACE:
+                        // note: keyboard keys events are sent continuously
                         if (g_GameState.eggIsHeld)
                         {
-                            g_GameState.eggIsHeld = false;
-                            g_GameState.eggVelocityY = 0;
+                            StartStrengthCharge();
                         }
                         break;
                     case SDLK_i:  // New debug teleport
@@ -1288,7 +1289,11 @@ int main(int argc, char* argv[])
             }
             else if (e.type == SDL_KEYUP)
             {
-                if (e.key.keysym.sym == SDLK_k && g_GameState.eggIsHeld && g_GameState.isCharging)
+                // if (e.key.keysym.sym == SDLK_k && g_GameState.eggIsHeld && g_GameState.isCharging)
+                // {
+                //     LaunchEgg();
+                // }
+                if (e.key.keysym.sym == SDLK_SPACE && g_GameState.eggIsHeld && g_GameState.isCharging)
                 {
                     LaunchEgg();
                 }
@@ -1297,7 +1302,8 @@ int main(int argc, char* argv[])
             {
                 if (e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
                 {
-                    StartStrengthCharge();
+                    HitAngleSquare();
+                    //StartStrengthCharge();
                 }
                 else if (e.button.button == SDL_BUTTON_RIGHT && g_GameState.eggIsHeld)
                 {
@@ -1306,10 +1312,10 @@ int main(int argc, char* argv[])
             }
             else if (e.type == SDL_MOUSEBUTTONUP)
             {
-                if (e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
-                {
-                    LaunchEgg();
-                }
+                // if (e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
+                // {
+                //     LaunchEgg();
+                // }
             }
         }
 
