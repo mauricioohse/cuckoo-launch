@@ -46,6 +46,9 @@
 #define TIMER_FONT_SIZE 32     // Base font size before scaling
 #define WIN_MESSAGE_FONT_SIZE 32
 
+#define INSTRUCTION_FONT_SIZE 20
+#define INSTRUCTION_Y 50  // Adjust this value to position the text where you want
+
 const int SCREENS_HEIGHT = 1;
 const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * SCREENS_HEIGHT;
 const int BRANCHES_PER_SCREEN = 3;  // Adjust this for desired branch density
@@ -123,6 +126,8 @@ void ResetTimer();
 void SaveScore(Uint32 time);
 void RenderWinMessage();
 void LoadSquirrelSpriteDimensions(GameObject& squirrel);
+void RenderText(const char* text, int x, int y, int fontSize);
+void RenderInstructions();
 
 SDL_Texture* LoadTexture(const char* path)
 {    
@@ -559,6 +564,9 @@ void Render()
     // Render controls
     RenderControls();
 
+    // Render instructions
+    RenderInstructions();
+
     // Add before SDL_RenderPresent
     RenderTimer();
     RenderWinMessage();
@@ -841,7 +849,7 @@ void RenderControls()
         // Draw strength bar fill (from bottom to top)
         SDL_Rect strengthBarFill = {
             strengthBarX,
-            strengthBarY + STRENGTH_BAR_HEIGHT * (1.0f - g_GameState.strengthCharge),  // Start from bottom
+            static_cast<int>(strengthBarY + STRENGTH_BAR_HEIGHT * (1.0f - g_GameState.strengthCharge)),  // Start from bottom
             STRENGTH_BAR_WIDTH,
             static_cast<int>(STRENGTH_BAR_HEIGHT * g_GameState.strengthCharge)
         };
@@ -1118,6 +1126,88 @@ void LoadSquirrelSpriteDimensions(GameObject& squirrel) {
         squirrel.spriteWidths[i] = static_cast<int>(width * SQUIRREL_SCALE);
         squirrel.spriteHeights[i] = static_cast<int>(height * SQUIRREL_SCALE);
     }
+}
+
+void RenderInstructions()
+{
+    // Only show instructions when floor squirrel has the egg
+    if (g_GameState.eggIsHeld && g_GameState.activeSquirrel == &g_GameState.floorSquirrel)
+    {
+        // Calculate the background rectangle dimensions
+        int textWidth = 340;  // Adjust this value to fit your text
+        int textHeight = 120; // Covers 3 lines of text (adjust as needed)
+        int textX = WINDOW_WIDTH/2 - textWidth/2;
+        int textY = INSTRUCTION_Y;
+        
+        // Draw background rectangle
+        SDL_SetRenderDrawColor(g_Renderer, 135, 206, 235, 180);  // Light blue with some transparency
+        SDL_Rect bgRect = {
+            textX - 10,           // Add some padding
+            textY - 10,           // Add some padding
+            textWidth + 20,       // Add padding on both sides
+            textHeight + 20       // Add padding on both sides
+        };
+        SDL_RenderFillRect(g_Renderer, &bgRect);
+        
+
+        // Render the text
+        RenderText("SPACE - Hold to charge power", 
+                  textX, 
+                  textY, 
+                  INSTRUCTION_FONT_SIZE);
+                  
+        RenderText("Mouse Click - Adjust angle", 
+                  textX, 
+                  textY + 40, 
+                  INSTRUCTION_FONT_SIZE);
+                  
+        RenderText("RELEASE SPACE - Launch egg", 
+                  textX, 
+                  textY + 80, 
+                  INSTRUCTION_FONT_SIZE);
+    }
+}
+
+void RenderText(const char* text, int x, int y, int fontSize)
+{
+    // Set font size
+    TTF_Font* sizedFont = TTF_OpenFont("assets/VCR_OSD_MONO_1.001.ttf", fontSize);
+    if (!sizedFont) {
+        printf("Failed to load font for size %d! SDL_ttf Error: %s\n", fontSize, TTF_GetError());
+        return;
+    }
+
+    // Create surface
+    SDL_Color textColor = {255, 255, 255, 255};  // White text
+    SDL_Color outlineColor = {135, 206, 235, 255};  // Light blue outline
+    SDL_Surface* surface = TTF_RenderText_Shaded(sizedFont, text, textColor, outlineColor);
+    if (!surface) {
+        TTF_CloseFont(sizedFont);
+        return;
+    }
+
+    // Create texture
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(g_Renderer, surface);
+    if (!texture) {
+        SDL_FreeSurface(surface);
+        TTF_CloseFont(sizedFont);
+        return;
+    }
+
+    // Render text
+    SDL_Rect textRect = {
+        x,
+        y,
+        surface->w,
+        surface->h
+    };
+
+    SDL_RenderCopy(g_Renderer, texture, nullptr, &textRect);
+
+    // Clean up
+    SDL_DestroyTexture(texture);
+    SDL_FreeSurface(surface);
+    TTF_CloseFont(sizedFont);
 }
 
 int main(int argc, char* argv[])
