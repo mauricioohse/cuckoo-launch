@@ -7,6 +7,7 @@
 #include <SDL_ttf.h>
 #include <sstream>
 #include <iomanip>
+#include <SDL_mixer.h>
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -62,6 +63,8 @@ const int TOTAL_BRANCHES = BRANCHES_PER_SCREEN * SCREENS_HEIGHT;
 #define WIN_MESSAGE_X (WINDOW_WIDTH / 2)
 #define WIN_MESSAGE_Y (WINDOW_HEIGHT / 2)
 
+#define NUM_LAUNCH_SOUNDS 4
+
 SDL_Window* g_Window = nullptr;
 SDL_Renderer* g_Renderer = nullptr;
 SDL_Texture* g_EggTexture = nullptr;
@@ -87,6 +90,10 @@ SDL_Texture* g_SquirrelTextures[SQUIRREL_SPRITE_COUNT] = {nullptr};
 SDL_Texture* g_BackgroundBase = nullptr;
 SDL_Texture* g_BackgroundModular = nullptr;
 SDL_Texture* g_BackgroundTop = nullptr;
+
+Mix_Chunk* g_CrunchSound = nullptr;
+Mix_Chunk* g_WinSound = nullptr;
+Mix_Chunk* g_LaunchSounds[NUM_LAUNCH_SOUNDS] = {nullptr};
 
 struct GameObject {
     float x, y;
@@ -250,6 +257,46 @@ bool InitSDL()
     if (!g_BackgroundBase || !g_BackgroundModular || !g_BackgroundTop) {
         printf("Failed to load background textures!\n");
         return false;
+    }
+
+    // Initialize SDL_mixer
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 8, 2048) < 0)
+    {
+        printf("SDL_mixer could not initialize! SDL_mixer Error: %s\n", Mix_GetError());
+        return false;
+    }
+
+    // Load sound effect
+    g_CrunchSound = Mix_LoadWAV("assets/audio/82318-iedlabs-cruch-eggshells-medium.mp3");
+    if (g_CrunchSound == nullptr)
+    {
+        printf("Failed to load crunch sound effect! SDL_mixer Error: %s\n", Mix_GetError());
+        return false;
+    }
+
+    g_WinSound = Mix_LoadWAV("assets/audio/242501__gabrielaraujo__powerupsuccess.wav");
+    if (g_WinSound == nullptr)
+    {
+        printf("Failed to load g_WinSound sound effect! SDL_mixer Error: %s\n", Mix_GetError());
+        return false;
+    }
+
+    // Load launch sounds
+    const char* launchSoundPaths[NUM_LAUNCH_SOUNDS] = {
+        "assets/audio/zapsplat_animals_bird_ringneck_parakeet_says_what_you_doing_109613.mp3",
+        "assets/audio/zapsplat_animals_bird_ringneck_parakeet_single_excited_chirp_squeak_109616.mp3",
+        "assets/audio/zapsplat_animals_budgies_chirping_happy_001_75627.mp3",
+        "assets/audio/zapsplat_animals_budgies_chirping_happy_005_75538.mp3"
+    };
+
+    for (int i = 0; i < NUM_LAUNCH_SOUNDS; i++)
+    {
+        g_LaunchSounds[i] = Mix_LoadWAV(launchSoundPaths[i]);
+        if (g_LaunchSounds[i] == nullptr)
+        {
+            printf("Failed to load launch sound %d! SDL_mixer Error: %s\n", i, Mix_GetError());
+            return false;
+        }
     }
 
     return true;
@@ -604,6 +651,35 @@ void CleanUp()
     SDL_DestroyTexture(g_BackgroundBase);
     SDL_DestroyTexture(g_BackgroundModular);
     SDL_DestroyTexture(g_BackgroundTop);
+
+    if (g_CrunchSound != nullptr)
+    {
+        Mix_FreeChunk(g_CrunchSound);
+        g_CrunchSound = nullptr;
+    }
+
+    if (g_WinSound != nullptr)
+    {
+        Mix_FreeChunk(g_WinSound);
+        g_WinSound = nullptr;
+    }
+    
+    for (int i = 0; i < NUM_LAUNCH_SOUNDS; i++)
+    {
+        if (g_LaunchSounds[i] != nullptr)
+        {
+            Mix_FreeChunk(g_LaunchSounds[i]);
+            g_LaunchSounds[i] = nullptr;
+        }
+    }
+    
+    Mix_Quit();
+}
+
+void PlayRandomLaunchSound()
+{
+    int randomIndex = rand() % NUM_LAUNCH_SOUNDS;
+    Mix_PlayChannel(-1, g_LaunchSounds[randomIndex], 0);
 }
 
 bool CheckCollision(const SDL_Rect& a, const SDL_Rect& b)
@@ -693,6 +769,7 @@ void UpdatePhysics()
             newX = g_GameState.leftTree.x + g_GameState.leftTree.width;
             g_GameState.eggVelocityX = fabs(g_GameState.eggVelocityX) * 0.5f;
             collided = true;
+            Mix_PlayChannel(-1, g_CrunchSound, 0);
         }
         else if (CheckCollision(eggRect, rightTreeRect))
         {
@@ -700,6 +777,7 @@ void UpdatePhysics()
             newX = g_GameState.rightTree.x - g_GameState.egg.width;
             g_GameState.eggVelocityX = -fabs(g_GameState.eggVelocityX) * 0.5f;
             collided = true;
+            Mix_PlayChannel(-1, g_CrunchSound, 0);
         }
 
         if (collided)
@@ -739,6 +817,7 @@ void UpdatePhysics()
         {
             printf("Egg missed - giving to floor squirrel\n");
             HandleCollision(&g_GameState.floorSquirrel);
+            Mix_PlayChannel(-1, g_CrunchSound, 0);
 
             // reset timer
             ResetTimer();
@@ -776,6 +855,8 @@ void UpdatePhysics()
                 g_GameState.eggVelocityY = 0;
                 g_GameState.eggIsHeld = true;
                 g_GameState.activeSquirrel = &g_GameState.floorSquirrel;
+
+                Mix_PlayChannel(-1, g_WinSound, 0);
             }
         }
 
@@ -923,6 +1004,8 @@ void LaunchEgg()
         }
     //g_GameState.activeSquirrel = nullptr;  // Clear active squirrel
     g_GameState.currentEggSprite = 0;  // Reset to closed sprite when launching
+
+    PlayRandomLaunchSound();
 }
 
 void UpdateCamera()
