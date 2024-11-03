@@ -8,6 +8,7 @@
 #include <sstream>
 #include <iomanip>
 #include <SDL_mixer.h>
+#include <cstring>
 
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -145,6 +146,7 @@ void RenderWinMessage();
 void LoadSquirrelSpriteDimensions(GameObject& squirrel);
 void RenderText(const char* text, int x, int y, int fontSize);
 void RenderInstructions();
+void RenderLastScores();
 
 SDL_Texture* LoadTexture(const char* path)
 {    
@@ -441,7 +443,7 @@ void InitGameObjects()
 
     // Initialize nest position at the top-middle of the screen
     g_GameState.nest.x = (WINDOW_WIDTH - NEST_SIZE) / 2;
-    g_GameState.nest.y = 150;
+    g_GameState.nest.y = 74;
     g_GameState.nest.width = NEST_SIZE;
     g_GameState.nest.height = NEST_SIZE;
 
@@ -611,13 +613,13 @@ void RenderBackground()
 
 void RenderNest()
 {
-    SDL_SetRenderDrawColor(g_Renderer, NEST_COLOR.r, NEST_COLOR.g, NEST_COLOR.b, NEST_COLOR.a);
-    SDL_Rect nestRect = {
-        static_cast<int>(g_GameState.nest.x),
-        static_cast<int>(g_GameState.nest.y - g_GameState.cameraY), // Account for camera position
-        g_GameState.nest.width,
-        g_GameState.nest.height};
-    SDL_RenderFillRect(g_Renderer, &nestRect);
+    // SDL_SetRenderDrawColor(g_Renderer, NEST_COLOR.r, NEST_COLOR.g, NEST_COLOR.b, NEST_COLOR.a);
+    // SDL_Rect nestRect = {
+    //     static_cast<int>(g_GameState.nest.x),
+    //     static_cast<int>(g_GameState.nest.y - g_GameState.cameraY), // Account for camera position
+    //     g_GameState.nest.width,
+    //     g_GameState.nest.height};
+    // SDL_RenderFillRect(g_Renderer, &nestRect);
 }
 
 void Render()
@@ -663,11 +665,8 @@ void Render()
     // Render instructions
     RenderInstructions();
 
-
-    // Add before SDL_RenderPresent
-    RenderTimer();
-    RenderWinMessage();
-
+    RenderLastScores();  // Add this before SDL_RenderPresent
+    
     SDL_RenderPresent(g_Renderer);
 }
 
@@ -1281,10 +1280,10 @@ void RenderInstructions()
     if (g_GameState.isInNest)
     {
         // Calculate the background rectangle dimensions
-        int textWidth = 340;  // Adjust this value to fit your text
+        int textWidth = 280;  // Adjust this value to fit your text
         int textHeight = 120; // Covers 3 lines of text
         int textX = WINDOW_WIDTH/2 - textWidth/2;
-        int textY = 20;  // Move text to top of screen
+        int textY = 400;  // Move text to top of screen
         
         // Draw background rectangle
         SDL_SetRenderDrawColor(g_Renderer, 135, 206, 235, 180);  // Light blue with some transparency
@@ -1326,8 +1325,8 @@ void RenderInstructions()
         SDL_Rect bgRect = {
             textX - 10,           // Add some padding
             textY - 10,           // Add some padding
-            textWidth + 20,       // Add padding on both sides
-            textHeight + 20       // Add padding on both sides
+            textWidth ,       // Add padding on both sides
+            textHeight + 2       // Add padding on both sides
         };
         SDL_RenderFillRect(g_Renderer, &bgRect);
         
@@ -1390,6 +1389,80 @@ void RenderText(const char* text, int x, int y, int fontSize)
     SDL_DestroyTexture(texture);
     SDL_FreeSurface(surface);
     TTF_CloseFont(sizedFont);
+}
+
+// Add this function to read and store the last 5 scores
+std::vector<std::string> GetLastFiveScores() {
+    std::vector<std::string> scores;
+    FILE* file = fopen(SCORE_FILE, "r");
+    if (file) {
+        char line[32];
+        std::vector<std::string> allScores;
+        
+        // Read all scores
+        while (fgets(line, sizeof(line), file)) {
+            // Remove newline character
+            line[strcspn(line, "\n")] = 0;
+            allScores.push_back(line);
+        }
+        fclose(file);
+
+        // Get last 5 scores (or less if there aren't 5 yet)
+        int startIdx = std::max(0, static_cast<int>(allScores.size()) - 5);
+        for (int i = startIdx; i < allScores.size(); i++) {
+            scores.push_back(allScores[i]);
+        }
+    }
+    return scores;
+}
+
+// Add this function to render the scores box
+void RenderLastScores() {
+    // printf("isInNest: %d, eggIsHeld: %d, activeSquirrel is floor squirrel: %d\n", 
+    //        g_GameState.isInNest, 
+    //        g_GameState.eggIsHeld, 
+    //        g_GameState.activeSquirrel == &g_GameState.floorSquirrel);
+
+    
+    if (!g_GameState.isInNest ||
+        !(g_GameState.activeSquirrel == &g_GameState.floorSquirrel)) return;
+
+    std::vector<std::string> lastScores = GetLastFiveScores();
+    if (lastScores.empty()) return;
+
+    // Calculate dimensions for the score box
+    int textWidth = 200;  // Width of the box
+    int lineHeight = 25;  // Height per line
+    int textHeight = (lastScores.size() + 1) * lineHeight;  // +1 for title
+    int padding = 10;
+    
+    // Position in bottom right
+    int boxX = WINDOW_WIDTH - textWidth - padding;
+    int boxY = WINDOW_HEIGHT - textHeight - padding;
+
+    // Draw background rectangle
+    SDL_SetRenderDrawColor(g_Renderer, 135, 206, 235, 180);  // Light blue with transparency
+    SDL_Rect bgRect = {
+        boxX - padding,
+        boxY - padding,
+        textWidth,
+        textHeight +5
+    };
+    SDL_RenderFillRect(g_Renderer, &bgRect);
+
+    // Render title
+    RenderText("Last Scores:", 
+               boxX, 
+               boxY, 
+               INSTRUCTION_FONT_SIZE);
+
+    // Render each score
+    for (size_t i = 0; i < lastScores.size(); i++) {
+        RenderText(lastScores[i].c_str(),
+                  boxX,
+                  boxY + lineHeight * (i + 1),
+                  INSTRUCTION_FONT_SIZE);
+    }
 }
 
 int main(int argc, char* argv[])
