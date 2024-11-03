@@ -41,7 +41,7 @@
 #define ARROW_WIDTH 40
 #define ARROW_HEIGHT 15
 
-const int SCREENS_HEIGHT = 15;
+const int SCREENS_HEIGHT = 10;
 const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * SCREENS_HEIGHT;
 const int BRANCHES_PER_SCREEN = 3;  // Adjust this for desired branch density
 const int TOTAL_BRANCHES = BRANCHES_PER_SCREEN * SCREENS_HEIGHT;
@@ -894,6 +894,12 @@ void ResetTimer()
 
 void RenderTimer()
 {
+    // printf("Timer Debug - Active: %d, Start Time: %u, Current Time: %u, Elapsed: %u\n",
+    //        g_TimerActive,
+    //        g_StartTime,
+    //        SDL_GetTicks(),
+    //        g_TimerActive ? SDL_GetTicks() - g_StartTime : 0);
+
     if (!g_TimerActive) return;
 
     // Calculate elapsed time
@@ -917,11 +923,6 @@ void RenderTimer()
     SDL_Surface* surface = TTF_RenderText_Solid(g_Font, ss.str().c_str(), textColor);
     if (!surface) return;
 
-    // Create texture
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(g_Renderer, surface);
-    SDL_FreeSurface(surface);
-    if (!texture) return;
-
     // Render timer
     SDL_Rect timerRect = {
         TIMER_X,
@@ -929,8 +930,18 @@ void RenderTimer()
         surface->w,
         surface->h
     };
+
+    // Create texture
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(g_Renderer, surface);
+    SDL_FreeSurface(surface);
+    if (!texture) return;
+
     SDL_RenderCopy(g_Renderer, texture, nullptr, &timerRect);
     SDL_DestroyTexture(texture);
+
+    // Debug texture info
+    printf("Timer texture info - S %s, Position: (%d, %d), Size: (%d, %d)\n",
+           ss.str().c_str(), timerRect.x, timerRect.y, timerRect.w, timerRect.h);
 }
 
 void SaveScore(Uint32 time)
