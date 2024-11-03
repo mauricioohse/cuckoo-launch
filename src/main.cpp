@@ -32,7 +32,7 @@
 #define ANGLE_BAR_Y 370
 #define ANGLE_SQUARE_SIZE 15
 #define ANGLE_GRAVITY 0.5f
-#define ANGLE_JUMP_POWER 8.0f
+#define ANGLE_JUMP_POWER 6.0f
 #define LAUNCH_POWER_SCALE 20.0f
 #define PI 3.14159265359f
 
@@ -51,7 +51,7 @@
 #define INSTRUCTION_FONT_SIZE 20
 #define INSTRUCTION_Y 50  // Adjust this value to position the text where you want
 
-const int SCREENS_HEIGHT = 1;
+const int SCREENS_HEIGHT = 10;
 const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * SCREENS_HEIGHT;
 const int BRANCHES_PER_SCREEN = 3;  // Adjust this for desired branch density
 const int TOTAL_BRANCHES = BRANCHES_PER_SCREEN * SCREENS_HEIGHT;
@@ -59,6 +59,7 @@ const int TOTAL_BRANCHES = BRANCHES_PER_SCREEN * SCREENS_HEIGHT;
 const int NEST_SIZE = 64;
 const SDL_Color NEST_COLOR = {34, 139, 34, 255};  // Forest green
 
+const float INITIAL_HOLD_TIME = 3.0f;  // Seconds to hold egg in nest
 
 #define TIMER_X (WINDOW_WIDTH - 200)
 #define TIMER_Y 20
@@ -131,6 +132,8 @@ struct GameState {
     float targetCameraY;  // Target position for smooth scrolling
     int currentEggSprite = 0;
     GameObject nest;
+    bool isInNest;  // New flag to track if egg is in starting position
+    bool isFirstFall = 1;
 } g_GameState;
 
 // forward declarations
@@ -438,11 +441,11 @@ void InitGameObjects()
 
     // Initialize nest position at the top-middle of the screen
     g_GameState.nest.x = (WINDOW_WIDTH - NEST_SIZE) / 2;
-    g_GameState.nest.y = 0;
+    g_GameState.nest.y = 150;
     g_GameState.nest.width = NEST_SIZE;
     g_GameState.nest.height = NEST_SIZE;
 
-    // Initialize egg position relative to floor squirrel
+    // Initialize egg position on nest
     g_GameState.egg = {
         g_GameState.nest.x + (NEST_SIZE - EGG_SIZE_X) / 2,  // Center egg on nest
         g_GameState.nest.y, 
@@ -453,13 +456,14 @@ void InitGameObjects()
     };
 
     g_GameState.eggVelocityY = 0.0f;
-    g_GameState.eggIsHeld = false;
+    g_GameState.eggVelocityX = 0.0f;
+    g_GameState.isInNest = true;  // Start in nest
+
     g_GameState.strengthCharge = 0.0f;
     g_GameState.isCharging = false;
     g_GameState.isDepletingCharge = false;
     g_GameState.angleSquareY = ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE;
     g_GameState.angleSquareVelocity = 0.0f;
-    g_GameState.eggVelocityX = 0.0f;
     g_GameState.isLaunchingRight = true;  // Default to right direction
     g_GameState.activeSquirrel = &g_GameState.floorSquirrel;  // Start with floor squirrel
     g_GameState.cameraY = 0.0f;
@@ -528,7 +532,7 @@ void RenderGameObject(const GameObject& obj)
 
 void RenderArrow()
 {
-    if (!g_GameState.eggIsHeld) return;
+    if (!g_GameState.eggIsHeld || g_GameState.isInNest ) return;
 
     // Calculate angle based on angle square position
     float normalizedY = (ANGLE_BAR_Y + ANGLE_BAR_HEIGHT - ANGLE_SQUARE_SIZE - g_GameState.angleSquareY) 
@@ -641,6 +645,9 @@ void Render()
         RenderGameObject(squirrel);
     }
 
+    // Render the nest
+    RenderNest();
+
     // Render floor squirrel
     RenderGameObject(g_GameState.floorSquirrel);
 
@@ -656,8 +663,6 @@ void Render()
     // Render instructions
     RenderInstructions();
 
-    // Render the nest
-    RenderNest();
 
     // Add before SDL_RenderPresent
     RenderTimer();
@@ -764,8 +769,13 @@ void HandleCollision(GameObject *squirrel)
 
 }
 
-void UpdatePhysics()
+void UpdatePhysics(float deltaTime)
 {
+    // Skip physics if egg is still in nest
+    if (g_GameState.isInNest) {
+        return;
+    }
+
     if (!g_GameState.eggIsHeld)
     {
         // Apply gravity
@@ -846,7 +856,9 @@ void UpdatePhysics()
                 squirrel.spriteHeights[squirrel.currentSprite]
             };
 
-            if (CheckCollision(eggRect, squirrelRect) && g_GameState.activeSquirrel != &squirrel)
+            if (CheckCollision(eggRect, squirrelRect) && 
+                g_GameState.activeSquirrel != &squirrel &&
+                !g_GameState.isFirstFall) // does not check collision on first fall
             {
                 HandleCollision(&squirrel);
                 printf("Egg caught by squirrel!\n");
@@ -865,6 +877,7 @@ void UpdatePhysics()
 
             // reset timer
             ResetTimer();
+            g_GameState.isFirstFall = 0; // clears after falling the first time
         }
 
 
@@ -1264,8 +1277,43 @@ void LoadSquirrelSpriteDimensions(GameObject& squirrel) {
 
 void RenderInstructions()
 {
-    // Only show instructions when floor squirrel has the egg
-    if (g_GameState.eggIsHeld && g_GameState.activeSquirrel == &g_GameState.floorSquirrel)
+    // Change condition to show instructions when egg is in nest
+    if (g_GameState.isInNest)
+    {
+        // Calculate the background rectangle dimensions
+        int textWidth = 340;  // Adjust this value to fit your text
+        int textHeight = 120; // Covers 3 lines of text
+        int textX = WINDOW_WIDTH/2 - textWidth/2;
+        int textY = 20;  // Move text to top of screen
+        
+        // Draw background rectangle
+        SDL_SetRenderDrawColor(g_Renderer, 135, 206, 235, 180);  // Light blue with some transparency
+        SDL_Rect bgRect = {
+            textX - 10,
+            textY - 10,
+            textWidth + 20,
+            textHeight + 20
+        };
+        SDL_RenderFillRect(g_Renderer, &bgRect);
+
+        // Change instruction text for initial nest release
+        RenderText("Press ENTER or SPACE", 
+                  textX, 
+                  textY, 
+                  INSTRUCTION_FONT_SIZE);
+                  
+        RenderText("to release the egg", 
+                  textX, 
+                  textY + 40, 
+                  INSTRUCTION_FONT_SIZE);
+                  
+        RenderText("from the nest", 
+                  textX, 
+                  textY + 80, 
+                  INSTRUCTION_FONT_SIZE);
+    }
+    // Keep existing instructions for when floor squirrel has the egg
+    else if (g_GameState.eggIsHeld && g_GameState.activeSquirrel == &g_GameState.floorSquirrel)
     {
         // Calculate the background rectangle dimensions
         int textWidth = 340;  // Adjust this value to fit your text
@@ -1418,6 +1466,13 @@ int main(int argc, char* argv[])
                             HitAngleSquare();
                         }
                         break;
+                    case SDLK_RETURN:  // Enter key
+                        if (g_GameState.isInNest) {
+                            g_GameState.isInNest = false;
+                            g_GameState.eggIsHeld = false;
+                            printf("Egg released from nest\n");
+                        }
+                        break;
                 }
             }
             else if (e.type == SDL_KEYUP)
@@ -1429,6 +1484,17 @@ int main(int argc, char* argv[])
                 if (e.key.keysym.sym == SDLK_SPACE && g_GameState.eggIsHeld && g_GameState.isCharging)
                 {
                     LaunchEgg();
+                }
+
+                if (e.key.keysym.sym == SDLK_SPACE)
+                {
+
+                    if (g_GameState.isInNest)
+                    {
+                        g_GameState.isInNest = false;
+                        g_GameState.eggIsHeld = false;
+                        printf("Egg released from nest\n");
+                    }
                 }
             }
             else if (e.type == SDL_MOUSEBUTTONDOWN)
@@ -1457,7 +1523,7 @@ int main(int argc, char* argv[])
         float deltaTime = (currentTime - lastTime) / 1000.0f;
         lastTime = currentTime;
 
-        UpdatePhysics();
+        UpdatePhysics(deltaTime);
         UpdateControls();
         UpdateCamera();  // Add camera update
         UpdateEggAnimation(deltaTime);  // Add this line
