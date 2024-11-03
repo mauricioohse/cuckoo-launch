@@ -36,17 +36,27 @@
 
 #define MIN_BRANCH_SPACING (WINDOW_HEIGHT * 0.1f)  // Minimum vertical gap between branches
 #define MAX_BRANCH_SPACING (WINDOW_HEIGHT * 0.5f)  // Maximum vertical gap between branches
-#define MIN_BRANCH_EXTENSION 50.0f   // Minimum distance branch extends from tree
-#define MAX_BRANCH_EXTENSION 300.0f  // Maximum distance branch extends from tree
+#define MIN_BRANCH_EXTENSION 125.0f   // Minimum distance branch extends from tree
+#define MAX_BRANCH_EXTENSION 350.0f  // Maximum distance branch extends from tree
 #define BRANCH_HEIGHT 30             // Height of branch texture
 
 #define ARROW_WIDTH 40
 #define ARROW_HEIGHT 15
 
-const int SCREENS_HEIGHT = 3;
+#define TIMER_FONT_SIZE 32     // Base font size before scaling
+#define WIN_MESSAGE_FONT_SIZE 32
+
+const int SCREENS_HEIGHT = 1;
 const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * SCREENS_HEIGHT;
 const int BRANCHES_PER_SCREEN = 3;  // Adjust this for desired branch density
 const int TOTAL_BRANCHES = BRANCHES_PER_SCREEN * SCREENS_HEIGHT;
+
+#define TIMER_X (WINDOW_WIDTH - 200)
+#define TIMER_Y 20
+
+#define SCORE_FILE "assets/scores.txt"
+#define WIN_MESSAGE_X (WINDOW_WIDTH / 2)
+#define WIN_MESSAGE_Y (WINDOW_HEIGHT / 2)
 
 SDL_Window* g_Window = nullptr;
 SDL_Renderer* g_Renderer = nullptr;
@@ -61,12 +71,7 @@ bool g_TimerActive = false;
 bool g_WinAchieved = false;
 Uint32 g_lastElapsedTime = 0;
 
-#define TIMER_X (WINDOW_WIDTH - 150)
-#define TIMER_Y 20
 
-#define SCORE_FILE "assets/scores.txt"
-#define WIN_MESSAGE_X (WINDOW_WIDTH / 2)
-#define WIN_MESSAGE_Y (WINDOW_HEIGHT / 2)
 
 SDL_Texture* g_EggTextures[EGG_SPRITE_COUNT] = {nullptr};
 float g_EggAnimationTime = 0.0f;
@@ -163,7 +168,7 @@ bool InitSDL()
         return false;
     }
 
-    g_Font = TTF_OpenFont("assets/VCR_OSD_MONO_1.001.ttf", 24);
+    g_Font = TTF_OpenFont("assets/VCR_OSD_MONO_1.001.ttf", TIMER_FONT_SIZE);
     if (!g_Font)
     {
         printf("Failed to load font! SDL_ttf Error: %s\n", TTF_GetError());
@@ -848,23 +853,23 @@ void RenderControls()
         SDL_RenderFillRect(g_Renderer, &strengthBarFill);
 
         // Draw angle bar background
-        SDL_Rect angleBarBg = {
-            ANGLE_BAR_X,
-            ANGLE_BAR_Y,
-            ANGLE_BAR_WIDTH,
-            ANGLE_BAR_HEIGHT
-        };
-        SDL_SetRenderDrawColor(g_Renderer, 100, 100, 100, 255);
+        // SDL_Rect angleBarBg = {
+        //     ANGLE_BAR_X,
+        //     ANGLE_BAR_Y,
+        //     ANGLE_BAR_WIDTH,
+        //     ANGLE_BAR_HEIGHT
+        // };
+        // SDL_SetRenderDrawColor(g_Renderer, 100, 100, 100, 255);
         //SDL_RenderFillRect(g_Renderer, &angleBarBg);
 
         // Draw angle square
-        SDL_Rect angleSquare = {
-            ANGLE_BAR_X + (ANGLE_BAR_WIDTH - ANGLE_SQUARE_SIZE) / 2,
-            static_cast<int>(g_GameState.angleSquareY),
-            ANGLE_SQUARE_SIZE,
-            ANGLE_SQUARE_SIZE
-        };
-        SDL_SetRenderDrawColor(g_Renderer, 255, 255, 0, 255);  // Yellow square
+        // SDL_Rect angleSquare = {
+        //     ANGLE_BAR_X + (ANGLE_BAR_WIDTH - ANGLE_SQUARE_SIZE) / 2,
+        //     static_cast<int>(g_GameState.angleSquareY),
+        //     ANGLE_SQUARE_SIZE,
+        //     ANGLE_SQUARE_SIZE
+        // };
+        // SDL_SetRenderDrawColor(g_Renderer, 255, 255, 0, 255);  // Yellow square
         //SDL_RenderFillRect(g_Renderer, &angleSquare);
     }
 }
@@ -966,12 +971,6 @@ void ResetTimer()
 
 void RenderTimer()
 {
-    // printf("Timer Debug - Active: %d, Start Time: %u, Current Time: %u, Elapsed: %u\n",
-    //        g_TimerActive,
-    //        g_StartTime,
-    //        SDL_GetTicks(),
-    //        g_TimerActive ? SDL_GetTicks() - g_StartTime : 0);
-
     if (!g_TimerActive) return;
 
     // Calculate elapsed time
@@ -988,11 +987,15 @@ void RenderTimer()
     std::stringstream ss;
     ss << std::setfill('0') << std::setw(2) << minutes << ":"
        << std::setfill('0') << std::setw(2) << seconds << "."
-       << std::setfill('0') << std::setw(3) << milliseconds;
+       << std::setfill('0') << std::setw(2) << (milliseconds / 10);
     
-    // Create surface
-    SDL_Color textColor = {255, 255, 255, 255};  // White color
-    SDL_Surface* surface = TTF_RenderText_Solid(g_Font, ss.str().c_str(), textColor);
+    // Set outline thickness (1-5 pixels)
+    TTF_SetFontOutline(g_Font, 0);
+
+    // Create surface with outline
+    SDL_Color textColor = {255, 255, 255, 255};  // White text
+    SDL_Color outlineColor = {135, 206, 235, 255};     // Light blue outline
+    SDL_Surface* surface = TTF_RenderText_Shaded(g_Font, ss.str().c_str(), textColor, outlineColor);
     if (!surface) return;
 
     // Render timer
@@ -1010,7 +1013,10 @@ void RenderTimer()
 
     SDL_RenderCopy(g_Renderer, texture, nullptr, &timerRect);
     SDL_DestroyTexture(texture);
-
+    
+    // Reset outline for other text rendering
+    TTF_SetFontOutline(g_Font, 0);
+    
     // Debug texture info
     // printf("Timer texture info - S %s, Position: (%d, %d), Size: (%d, %d)\n",
     //        ss.str().c_str(), timerRect.x, timerRect.y, timerRect.w, timerRect.h);
@@ -1044,12 +1050,15 @@ void RenderWinMessage()
     std::stringstream ss;
     ss << "Final Time: " << std::setfill('0') << std::setw(2) << minutes 
        << ":" << std::setfill('0') << std::setw(2) << seconds 
-       << "." << std::setfill('0') << std::setw(3) << milliseconds;
+       << std::setfill('0') << std::setw(2) << (milliseconds / 10);
 
     // Create surface
     SDL_Color textColor = {255, 255, 255, 255};  // White color
-    SDL_Surface* surface = TTF_RenderText_Solid(g_Font, ss.str().c_str(), textColor);
-    if (!surface) return;
+
+    SDL_Color outlineColor = {135, 206, 235, 255}; // Light blue outline
+    SDL_Surface *surface = TTF_RenderText_Shaded(g_Font, ss.str().c_str(), textColor, outlineColor);
+    if (!surface)
+        return;
 
     // Create texture
     SDL_Texture* texture = SDL_CreateTextureFromSurface(g_Renderer, surface);
