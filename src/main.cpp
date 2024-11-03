@@ -72,6 +72,8 @@ float g_EggAnimationTime = 0.0f;
 #define SQUIRREL_SPRITE_COUNT 2
 SDL_Texture* g_SquirrelTextures[SQUIRREL_SPRITE_COUNT] = {nullptr};
 
+#define SQUIRREL_SCALE 0.5f  // Adjust this value to scale sprites (1.0f = original size, 0.5f = half size, 2.0f = double size)
+
 struct GameObject {
     float x, y;
     int width, height;
@@ -230,13 +232,13 @@ bool InitSDL()
 int GetDefaultSquirrelWidth() {
     int width, height;
     SDL_QueryTexture(g_SquirrelTextures[0], nullptr, nullptr, &width, &height);
-    return width;
+    return static_cast<int>(width * SQUIRREL_SCALE);
 }
 
 int GetDefaultSquirrelHeight() {
     int width, height;
     SDL_QueryTexture(g_SquirrelTextures[0], nullptr, nullptr, &width, &height);
-    return height;
+    return static_cast<int>(height * SQUIRREL_SCALE);
 }
 
 void GenerateBranchesAndSquirrels()
@@ -391,10 +393,15 @@ void RenderGameObject(const GameObject& obj)
     else if (&obj == &g_GameState.floorSquirrel || 
              (&obj >= &g_GameState.squirrels.front() && &obj <= &g_GameState.squirrels.back()))
     {
-        SDL_RenderCopy(g_Renderer,
-                      g_SquirrelTextures[obj.currentSprite],
-                      nullptr,
-                      &destRect);
+        // Add flip based on isLeftSide
+        SDL_RendererFlip flip = (obj.isLeftSide) ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+        SDL_RenderCopyEx(g_Renderer,
+                        g_SquirrelTextures[obj.currentSprite],
+                        nullptr,
+                        &destRect,
+                        0,      // no rotation
+                        nullptr, // rotate around center
+                        flip);  // flip horizontally if needed
     }
     else
     {
@@ -1016,8 +1023,8 @@ void LoadSquirrelSpriteDimensions(GameObject& squirrel) {
     for (int i = 0; i < SQUIRREL_SPRITE_COUNT; i++) {
         int width, height;
         SDL_QueryTexture(g_SquirrelTextures[i], nullptr, nullptr, &width, &height);
-        squirrel.spriteWidths[i] = width;
-        squirrel.spriteHeights[i] = height;
+        squirrel.spriteWidths[i] = static_cast<int>(width * SQUIRREL_SCALE);
+        squirrel.spriteHeights[i] = static_cast<int>(height * SQUIRREL_SCALE);
     }
 }
 
