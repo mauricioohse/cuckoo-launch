@@ -15,6 +15,10 @@
 #include <emscripten/html5.h>
 #endif
 
+
+#define TARGET_FPS 60
+#define FRAME_TIME (1000.0f / TARGET_FPS)
+
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 #define TREE_WIDTH 75
@@ -1632,147 +1636,188 @@ void UpdateSquirrelAnimations(float deltaTime) {
     }
 }
 
-int main(int argc, char* argv[])
+struct MainLoopData {
+    bool quit;
+    SDL_Event e;
+    Uint32 lastTime;
+} g_MainLoopData;
+
+
+void UpdateGame(Uint32 deltaTime)
 {
-    if (!InitSDL())
-    {
+
+    UpdatePhysics(deltaTime);
+    UpdateControls();
+    UpdateCamera(); // Add camera update
+    UpdateEggAnimation(deltaTime);
+    UpdateSquirrelAnimations(deltaTime);
+}
+
+
+void main_loop_iteration() {
+    Uint32 frameStart = SDL_GetTicks();
+    Uint32 currentTime = frameStart;
+    float deltaTime = (currentTime - g_MainLoopData.lastTime) / 1000.0f;
+    g_MainLoopData.lastTime = currentTime;
+
+    while (SDL_PollEvent(&g_MainLoopData.e)) {
+        if (g_MainLoopData.e.type == SDL_QUIT) {
+            g_MainLoopData.quit = true;
+            #ifdef __EMSCRIPTEN__
+            emscripten_cancel_main_loop();
+            #endif
+        }
+        else if (g_MainLoopData.e.type == SDL_KEYDOWN)
+        {
+            switch (g_MainLoopData.e.key.keysym.sym)
+            {
+            case SDLK_ESCAPE:
+                g_MainLoopData.quit = true;
+                break;
+            case SDLK_SPACE:
+                // note: keyboard keys events are sent continuously
+                if (g_GameState.eggIsHeld)
+                {
+                    StartStrengthCharge();
+                }
+                break;
+            case SDLK_i: // New debug teleport
+                if (!g_GameState.squirrels.empty())
+                {
+                    // Teleport above the first squirrel
+                    const auto &squirrel = g_GameState.squirrels[0];
+                    g_GameState.egg.x = squirrel.x + (squirrel.spriteWidths[squirrel.currentSprite] - g_GameState.egg.width) / 2;
+                    g_GameState.egg.y = squirrel.y - g_GameState.egg.height - 50; // 50 pixels above
+                    g_GameState.eggVelocityY = 0;
+                    g_GameState.eggIsHeld = false;
+                }
+                break;
+            case SDLK_a:
+                if (g_GameState.eggIsHeld && g_GameState.activeSquirrel)
+                {
+                    g_GameState.isLaunchingRight = false;
+                    g_GameState.activeSquirrel->isLeftSide = false; // Make active squirrel face left
+                }
+                break;
+            case SDLK_d:
+                if (g_GameState.eggIsHeld && g_GameState.activeSquirrel)
+                {
+                    g_GameState.isLaunchingRight = true;
+                    g_GameState.activeSquirrel->isLeftSide = true; // Make active squirrel face right
+                }
+                break;
+            case SDLK_k:
+                // note: keyboard keys events are sent continuously
+                if (g_GameState.eggIsHeld)
+                {
+                    StartStrengthCharge();
+                }
+
+                break;
+            case SDLK_l:
+                if (g_GameState.eggIsHeld)
+                {
+                    HitAngleSquare();
+                }
+                break;
+            case SDLK_RETURN: // Enter key
+                if (g_GameState.isInNest)
+                {
+                    g_GameState.isInNest = false;
+                    g_GameState.eggIsHeld = false;
+                    printf("Egg released from nest\n");
+                }
+                break;
+            }
+        }
+        else if (g_MainLoopData.e.type == SDL_KEYUP)
+        {
+            // if (g_MainLoopData.e.key.keysym.sym == SDLK_k && g_GameState.eggIsHeld && g_GameState.isCharging)
+            // {
+            //     LaunchEgg();
+            // }
+            if (g_MainLoopData.e.key.keysym.sym == SDLK_SPACE && g_GameState.eggIsHeld && g_GameState.isCharging)
+            {
+                LaunchEgg();
+            }
+
+            if (g_MainLoopData.e.key.keysym.sym == SDLK_SPACE)
+            {
+
+                if (g_GameState.isInNest)
+                {
+                    g_GameState.isInNest = false;
+                    g_GameState.eggIsHeld = false;
+                    printf("Egg released from nest\n");
+                }
+            }
+        }
+        else if (g_MainLoopData.e.type == SDL_MOUSEBUTTONDOWN)
+        {
+            if (g_MainLoopData.e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
+            {
+                HitAngleSquare();
+                // StartStrengthCharge();
+            }
+            else if (g_MainLoopData.e.button.button == SDL_BUTTON_RIGHT && g_GameState.eggIsHeld)
+            {
+                HitAngleSquare();
+            }
+        }
+        else if (g_MainLoopData.e.type == SDL_MOUSEBUTTONUP)
+        {
+            // if (e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
+            // {
+            //     LaunchEgg();
+            // }
+        }
+    }
+
+    // Update game state
+    UpdateGame(deltaTime);
+    
+    // Render
+    Render();
+
+    // Cap frame rate
+    Uint32 frameTime = SDL_GetTicks() - frameStart;
+    if (frameTime < FRAME_TIME) {
+        SDL_Delay(FRAME_TIME - frameTime);
+    }
+}
+
+int main(int argc, char* argv[]) {
+    if (!InitSDL()) {
         printf("Failed to initialize!\n");
         return -1;
     }
 
     InitGameObjects();
 
-    bool quit = false;
-    SDL_Event e;
+    g_MainLoopData.quit = false;
+    g_MainLoopData.lastTime = SDL_GetTicks();
 
-    Uint32 lastTime = SDL_GetTicks();
-
-    while (!quit)
-    {
-        while (SDL_PollEvent(&e))
-        {
-            if (e.type == SDL_QUIT)
-            {
-                quit = true;
-            }
-            else if (e.type == SDL_KEYDOWN)
-            {
-                switch (e.key.keysym.sym)
-                {
-                    case SDLK_ESCAPE:
-                        quit = true;
-                        break;
-                    case SDLK_SPACE:
-                        // note: keyboard keys events are sent continuously
-                        if (g_GameState.eggIsHeld)
-                        {
-                            StartStrengthCharge();
-                        }
-                        break;
-                    case SDLK_i:  // New debug teleport
-                        if (!g_GameState.squirrels.empty())
-                        {
-                            // Teleport above the first squirrel
-                            const auto& squirrel = g_GameState.squirrels[0];
-                            g_GameState.egg.x = squirrel.x + (squirrel.spriteWidths[squirrel.currentSprite] - g_GameState.egg.width) / 2;
-                            g_GameState.egg.y = squirrel.y - g_GameState.egg.height - 50;  // 50 pixels above
-                            g_GameState.eggVelocityY = 0;
-                            g_GameState.eggIsHeld = false;
-                        }
-                        break;
-                    case SDLK_a:
-                        if (g_GameState.eggIsHeld && g_GameState.activeSquirrel) {
-                            g_GameState.isLaunchingRight = false;
-                            g_GameState.activeSquirrel->isLeftSide = false;  // Make active squirrel face left
-                        }
-                        break;
-                    case SDLK_d:
-                        if (g_GameState.eggIsHeld && g_GameState.activeSquirrel) {
-                            g_GameState.isLaunchingRight = true;
-                            g_GameState.activeSquirrel->isLeftSide = true;  // Make active squirrel face right
-                        }
-                        break;
-                    case SDLK_k:
-                        // note: keyboard keys events are sent continuously
-                        if (g_GameState.eggIsHeld)
-                        {
-                            StartStrengthCharge();
-                        }
-
-                        break;
-                    case SDLK_l:
-                        if (g_GameState.eggIsHeld)
-                        {
-                            HitAngleSquare();
-                        }
-                        break;
-                    case SDLK_RETURN:  // Enter key
-                        if (g_GameState.isInNest) {
-                            g_GameState.isInNest = false;
-                            g_GameState.eggIsHeld = false;
-                            printf("Egg released from nest\n");
-                        }
-                        break;
-                }
-            }
-            else if (e.type == SDL_KEYUP)
-            {
-                // if (e.key.keysym.sym == SDLK_k && g_GameState.eggIsHeld && g_GameState.isCharging)
-                // {
-                //     LaunchEgg();
-                // }
-                if (e.key.keysym.sym == SDLK_SPACE && g_GameState.eggIsHeld && g_GameState.isCharging)
-                {
-                    LaunchEgg();
-                }
-
-                if (e.key.keysym.sym == SDLK_SPACE)
-                {
-
-                    if (g_GameState.isInNest)
-                    {
-                        g_GameState.isInNest = false;
-                        g_GameState.eggIsHeld = false;
-                        printf("Egg released from nest\n");
-                    }
-                }
-            }
-            else if (e.type == SDL_MOUSEBUTTONDOWN)
-            {
-                if (e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
-                {
-                    HitAngleSquare();
-                    //StartStrengthCharge();
-                }
-                else if (e.button.button == SDL_BUTTON_RIGHT && g_GameState.eggIsHeld)
-                {
-                    HitAngleSquare();
-                }
-            }
-            else if (e.type == SDL_MOUSEBUTTONUP)
-            {
-                // if (e.button.button == SDL_BUTTON_LEFT && g_GameState.eggIsHeld)
-                // {
-                //     LaunchEgg();
-                // }
-            }
-        }
-
-        // used for sprite cycling
-        Uint32 currentTime = SDL_GetTicks();
-        float deltaTime = (currentTime - lastTime) / 1000.0f;
-        lastTime = currentTime;
-
-        UpdatePhysics(deltaTime);
-        UpdateControls();
-        UpdateCamera();  // Add camera update
-        UpdateEggAnimation(deltaTime);  
-        UpdateSquirrelAnimations(deltaTime);
-        Render();
-
-        // SDL_Delay(50);  // Sleep for x ms
+    #ifdef __EMSCRIPTEN__
+    // Web version - use emscripten_set_main_loop
+    emscripten_set_main_loop(main_loop_iteration, 0, 1);
+    #else
+    // Desktop version - use while loop
+    while (!g_MainLoopData.quit) {
+        main_loop_iteration();
     }
+    #endif
 
+    // Cleanup
     CleanUp();
     return 0;
+}
+
+void Update(Uint32 deltaTime)
+{
+
+    UpdatePhysics(deltaTime);
+    UpdateControls();
+    UpdateCamera(); // Add camera update
+    UpdateEggAnimation(deltaTime);
+    UpdateSquirrelAnimations(deltaTime);
 }
