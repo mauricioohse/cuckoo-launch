@@ -17,10 +17,11 @@ LIBRARY_PATHS = -L.\lib
 # -w suppresses all warnings
 # -Wl,-subsystem,windows gets rid of the console window
 #-g enables debbuging symbols for gdb
-COMPILER_FLAGS = -Wall -g # -Wl,-subsystem,windows
+COMPILER_FLAGS = -Wall -g -Wl,-subsystem,windows
 
 #LINKER_FLAGS specifies the libraries we're linking against
-LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer
+LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lwinmm -lusp10 -lgdi32 -static -static-libgcc -static-libstdc++ \
+    -lole32 -loleaut32 -limm32 -lversion -lsetupapi -lcfgmgr32 -lrpcrt4
 
 #This is the target that compiles our executable
 all : $(OBJS)

@@ -10,6 +10,11 @@
 #include <SDL_mixer.h>
 #include <cstring>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#endif
+
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
 #define TREE_WIDTH 75
@@ -91,7 +96,7 @@ Uint32 g_lastElapsedTime = 0;
 SDL_Texture* g_EggTextures[EGG_SPRITE_COUNT] = {nullptr};
 float g_EggAnimationTime = 0.0f;
 
-#define SQUIRREL_SPRITE_COUNT 2
+#define SQUIRREL_SPRITE_COUNT 5
 SDL_Texture* g_SquirrelTextures[SQUIRREL_SPRITE_COUNT] = {nullptr};
 
 // Add to global variables section
@@ -115,6 +120,8 @@ struct GameObject {
     int spriteHeights[SQUIRREL_SPRITE_COUNT] = {0};
     int branchType;      // For branches: which type of branch (0-2)
     int positionIndex;   // For squirrels: which position on the branch (0-1)
+    float animationTimer;  // Track animation duration
+    bool hasEgg;          // Track if squirrel has egg
 };
 
 struct GameState {
@@ -280,7 +287,10 @@ bool InitSDL()
 
     // Load squirrel sprites
     g_SquirrelTextures[0] = LoadTexture("assets/squirrel/squirrel_without_egg_1.png");
-    g_SquirrelTextures[1] = LoadTexture("assets/squirrel/squirrel_launch_no_egg_2.png");
+    g_SquirrelTextures[1] = LoadTexture("assets/squirrel/sprite_esquilo-holding_egg.png");
+    g_SquirrelTextures[2] = LoadTexture("assets/squirrel/sprite_esquilo-launch_1.png");
+    g_SquirrelTextures[3] = LoadTexture("assets/squirrel/sprite_esquilo-launch_2.png");
+    g_SquirrelTextures[4] = LoadTexture("assets/squirrel/sprite_esquilo-launch_3.png");
 
     // Check if all textures loaded successfully
     for (int i = 0; i < SQUIRREL_SPRITE_COUNT; i++)
@@ -342,7 +352,7 @@ bool InitSDL()
         }
     }
 
-    g_BackgroundMusic = Mix_LoadMUS("assets/audio/550258__klankbeeld__calm-forest-nov-oisterwijk-nl-02-201127_0208.wav");
+    g_BackgroundMusic = Mix_LoadMUS("assets/audio/music.mpeg");
     if (g_BackgroundMusic == nullptr)
     {
         printf("Failed to load background music! SDL_mixer Error: %s\n", Mix_GetError());
@@ -357,7 +367,7 @@ bool InitSDL()
     }
 
     // Optionally adjust music volume (0-128)
-    Mix_VolumeMusic(MIX_MAX_VOLUME / 2);  // 50% volume - adjust as needed
+    Mix_VolumeMusic(MIX_MAX_VOLUME / 6);  // 50% volume - adjust as needed
 
     // Load branch textures
     g_BranchTextures[0] = LoadTexture("assets/branch/branch1.png");
@@ -452,7 +462,9 @@ void GenerateBranchesAndSquirrels()
             {0},  // spriteWidths
             {0},  // spriteHeights
             -1,   // branchType (not used for squirrels)
-            positionIndex
+            positionIndex,
+            0.0f,           // animationTimer
+            false           // hasEgg
         };
         LoadSquirrelSpriteDimensions(squirrel);
         g_GameState.squirrels.push_back(squirrel);
@@ -734,7 +746,7 @@ void Render()
     // Render instructions
     RenderInstructions();
 
-    RenderLastScores();  // Add this before SDL_RenderPresent
+    RenderTimer();
     
     SDL_RenderPresent(g_Renderer);
 }
@@ -839,6 +851,11 @@ void HandleCollision(GameObject *squirrel)
     g_EggAnimationTime = 0.0f;
     squirrel->currentSprite = 1;  // Change to launch sprite
 
+    squirrel->hasEgg = true;
+    squirrel->currentSprite = 1;     // Switch to catching animation
+    squirrel->animationTimer = 0.5f; // Set animation duration to 0.5 seconds
+    g_GameState.egg.width = 0;      // Make egg invisible
+    g_GameState.egg.height = 0;
 }
 
 void UpdatePhysics(float deltaTime)
@@ -964,6 +981,11 @@ void UpdatePhysics(float deltaTime)
         {
             HandleCollision(&g_GameState.floorSquirrel);
             printf("Egg caught by floor squirrel!\n");
+
+            g_GameState.floorSquirrel.currentSprite = 2;
+            g_GameState.egg.width = EGG_SIZE_X; // Make egg visible again
+            g_GameState.egg.height = EGG_SIZE_Y;
+            g_GameState.floorSquirrel.animationTimer = 0.0;
         }
 
         SDL_Rect nestRect = {
@@ -1194,6 +1216,12 @@ void ResetTimer()
 {
     g_StartTime = SDL_GetTicks();
     g_TimerActive = false;
+    
+
+            g_GameState.floorSquirrel.currentSprite = 2;
+            g_GameState.egg.width = EGG_SIZE_X; // Make egg visible again
+            g_GameState.egg.height = EGG_SIZE_Y;
+            g_GameState.floorSquirrel.animationTimer = 0.0;
 }
 
 void RenderTimer()
@@ -1248,7 +1276,7 @@ void RenderTimer()
     // printf("Timer texture info - S %s, Position: (%d, %d), Size: (%d, %d)\n",
     //        ss.str().c_str(), timerRect.x, timerRect.y, timerRect.w, timerRect.h);
 }
-
+ 
 void SaveScore(Uint32 time)
 {
     FILE* file = fopen(SCORE_FILE, "a");  // Open in append mode
@@ -1383,6 +1411,8 @@ void RenderInstructions()
                   textX, 
                   textY + 80, 
                   INSTRUCTION_FONT_SIZE);
+
+        RenderLastScores();
     }
     // Keep existing instructions for when floor squirrel has the egg
     else if (g_GameState.eggIsHeld && g_GameState.activeSquirrel == &g_GameState.floorSquirrel)
@@ -1419,6 +1449,7 @@ void RenderInstructions()
                   textX, 
                   textY + 80, 
                   INSTRUCTION_FONT_SIZE);
+        RenderLastScores();
     }
 }
 
@@ -1467,6 +1498,36 @@ void RenderText(const char* text, int x, int y, int fontSize)
 // Add this function to read and store the last 5 scores
 std::vector<std::string> GetLastFiveScores() {
     std::vector<std::string> scores;
+    
+    #ifdef __EMSCRIPTEN__
+    // Web version - use localStorage
+    char* scoresStr = (char*)EM_ASM_INT({
+        var scores = localStorage.getItem('scores') || '';
+        var lengthBytes = lengthBytesUTF8(scores) + 1;
+        var stringOnWasmHeap = _malloc(lengthBytes);
+        stringToUTF8(scores, stringOnWasmHeap, lengthBytes);
+        return stringOnWasmHeap;
+    });
+    
+    if (scoresStr) {
+        std::stringstream ss(scoresStr);
+        std::string line;
+        std::vector<std::string> allScores;
+        
+        while (std::getline(ss, line)) {
+            allScores.push_back(line);
+        }
+        
+        free(scoresStr);
+        
+        // Get last 5 scores
+        int startIdx = std::max(0, static_cast<int>(allScores.size()) - 5);
+        for (int i = startIdx; i < allScores.size(); i++) {
+            scores.push_back(allScores[i]);
+        }
+    }
+    #else
+    // Desktop version - use file
     FILE* file = fopen(SCORE_FILE, "r");
     if (file) {
         char line[32];
@@ -1486,6 +1547,8 @@ std::vector<std::string> GetLastFiveScores() {
             scores.push_back(allScores[i]);
         }
     }
+    #endif
+    
     return scores;
 }
 
@@ -1496,9 +1559,6 @@ void RenderLastScores() {
     //        g_GameState.eggIsHeld, 
     //        g_GameState.activeSquirrel == &g_GameState.floorSquirrel);
 
-    
-    if (!g_GameState.isInNest ||
-        !(g_GameState.activeSquirrel == &g_GameState.floorSquirrel)) return;
 
     std::vector<std::string> lastScores = GetLastFiveScores();
     if (lastScores.empty()) return;
@@ -1535,6 +1595,40 @@ void RenderLastScores() {
                   boxX,
                   boxY + lineHeight * (i + 1),
                   INSTRUCTION_FONT_SIZE);
+    }
+}
+
+void UpdateSquirrelAnimations(float deltaTime) {
+    for (auto& squirrel : g_GameState.squirrels) {
+        if (squirrel.hasEgg && squirrel.animationTimer > 0) {
+            squirrel.animationTimer -= deltaTime;
+            
+            // Animation finished
+            if (squirrel.animationTimer <= 0) {
+                squirrel.currentSprite = 2;  // Return to default sprite
+                // Handle what happens after catching animation
+                // For example, reset egg or update score
+                g_GameState.egg.width = EGG_SIZE_X;   // Make egg visible again
+                g_GameState.egg.height = EGG_SIZE_Y;
+                squirrel.hasEgg = false;
+                // ... any other post-catch logic ...
+            }
+
+            if (squirrel.currentSprite >= 2 && squirrel.currentSprite <= 4)
+            {
+                static float animTimer = 0;
+                // Update animation every 400ms
+                animTimer += deltaTime * 1000; // Convert to milliseconds
+                if (animTimer >= 400) {
+                    squirrel.currentSprite++;
+                    if (squirrel.currentSprite > 4) {
+                        squirrel.currentSprite = 2;
+                    }
+                    animTimer = 0;
+                }
+            }
+
+        }
     }
 }
 
@@ -1672,7 +1766,8 @@ int main(int argc, char* argv[])
         UpdatePhysics(deltaTime);
         UpdateControls();
         UpdateCamera();  // Add camera update
-        UpdateEggAnimation(deltaTime);  // Add this line
+        UpdateEggAnimation(deltaTime);  
+        UpdateSquirrelAnimations(deltaTime);
         Render();
 
         // SDL_Delay(50);  // Sleep for x ms
