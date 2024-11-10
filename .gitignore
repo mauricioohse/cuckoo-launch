@@ -7,4 +7,4 @@ bin/**
 assets/*.txt
 emsdk/**
 cuckoo-launch/**
-cuckoo-launch.zip
+*.zip

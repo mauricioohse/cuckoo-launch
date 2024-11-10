@@ -82,6 +82,8 @@ const float INITIAL_HOLD_TIME = 3.0f;  // Seconds to hold egg in nest
 
 #define NUM_LAUNCH_SOUNDS 4
 
+#define printf if(0) printf
+
 SDL_Window* g_Window = nullptr;
 SDL_Renderer* g_Renderer = nullptr;
 SDL_Texture* g_EggTexture = nullptr;
@@ -574,6 +576,13 @@ void RenderGameObject(const GameObject& obj)
 
     if (&obj == &g_GameState.egg)
     {
+        // printf("Rendering egg at x:%d y:%d w:%d h:%d (sprite:%d)\n", 
+        //        destRect.x, 
+        //        destRect.y, 
+        //        destRect.w, 
+        //        destRect.h,
+        //        g_GameState.currentEggSprite);
+
         SDL_RenderCopy(g_Renderer, 
                       g_EggTextures[g_GameState.currentEggSprite], 
                       nullptr, 
@@ -856,10 +865,10 @@ void HandleCollision(GameObject *squirrel)
     squirrel->currentSprite = 1;  // Change to launch sprite
 
     squirrel->hasEgg = true;
-    squirrel->currentSprite = 1;     // Switch to catching animation
+    squirrel->currentSprite = 2;     // Switch to catching animation
     squirrel->animationTimer = 0.5f; // Set animation duration to 0.5 seconds
-    g_GameState.egg.width = 0;      // Make egg invisible
-    g_GameState.egg.height = 0;
+    // g_GameState.egg.width = 0;      // Make egg invisible
+    // g_GameState.egg.height = 0;
 }
 
 void UpdatePhysics(float deltaTime)
@@ -1283,10 +1292,34 @@ void RenderTimer()
  
 void SaveScore(Uint32 time)
 {
+    #ifdef __EMSCRIPTEN__
+    // Web version - use localStorage
+    int minutes = (time / 1000) / 60;
+    int seconds = (time / 1000) % 60;
+    int milliseconds = time % 1000;
+    
+    char scoreStr[32];
+    snprintf(scoreStr, sizeof(scoreStr), "%02d:%02d.%03d", minutes, seconds, milliseconds);
+    
+    EM_ASM({
+        // Get existing scores
+        var scores = localStorage.getItem('scores') || '';
+        // Add new score
+        scores += UTF8ToString($0) + '\n';
+        // Keep only last 5 scores
+        var scoresArray = scores.trim().split('\n');
+        if (scoresArray.length > 5) {
+            scoresArray = scoresArray.slice(-5);
+            scores = scoresArray.join('\n') + '\n';
+        }
+        // Save back to localStorage
+        localStorage.setItem('scores', scores);
+    }, scoreStr);
+    
+    #else
+    // Desktop version - use file
     FILE* file = fopen(SCORE_FILE, "a");  // Open in append mode
-    if (file)
-    {
-        // Convert time to minutes:seconds.milliseconds format
+    if (file) {
         int minutes = (time / 1000) / 60;
         int seconds = (time / 1000) % 60;
         int milliseconds = time % 1000;
@@ -1294,6 +1327,7 @@ void SaveScore(Uint32 time)
         fprintf(file, "%02d:%02d.%03d\n", minutes, seconds, milliseconds);
         fclose(file);
     }
+    #endif
 }
 
 void RenderWinMessage()
@@ -1553,6 +1587,11 @@ std::vector<std::string> GetLastFiveScores() {
     }
     #endif
     
+    // printf("Number of scores loaded: %zu\n", scores.size());
+    // for (size_t i = 0; i < scores.size(); i++) {
+    //     printf("Score %zu: %s\n", i, scores[i].c_str());
+    // }
+
     return scores;
 }
 
