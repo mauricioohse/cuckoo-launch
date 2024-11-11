@@ -71,8 +71,6 @@ const float TOTAL_GAME_HEIGHT = WINDOW_HEIGHT * TOTAL_HEIGHT_IN_SCREENS;
 const int NEST_SIZE = 64;
 const SDL_Color NEST_COLOR = {34, 139, 34, 255};  // Forest green
 
-const float INITIAL_HOLD_TIME = 3.0f;  // Seconds to hold egg in nest
-
 #define TIMER_X (WINDOW_WIDTH - 200)
 #define TIMER_Y 20
 
@@ -104,9 +102,9 @@ float g_EggAnimationTime = 0.0f;
 
 
 enum {
-    SPRITE_SQUIRREL_DEFAULT_0,
-    SPRITE_SQUIRREL_WITHOUT_EGG_1,
-    SPRITE_SQUIRREL_WITH_EGG_2,
+    SPRITE_SQUIRREL_WITHOUT_EGG_0,
+    SPRITE_SQUIRREL_WITH_EGG_1,
+    SPRITE_SQUIRREL_TO_LAUNCH_2,
     SPRITE_SQUIRREL_TO_LAUNCH_3,
     SPRITE_SQUIRREL_TO_LAUNCH_4,
     SPRITE_SQUIRREL_MAX_VALUE // SHOULD ALWAYS BE THE LAST
@@ -431,11 +429,11 @@ void GenerateBranchesAndSquirrels()
     {
         // Random height spacing for this branch
         float spacing = MIN_BRANCH_SPACING + 
-            static_cast<float>(rand()) / RAND_MAX * (MAX_BRANCH_SPACING - MIN_BRANCH_SPACING);
+            static_cast<float>((float)rand()) / (float)RAND_MAX * (MAX_BRANCH_SPACING - MIN_BRANCH_SPACING);
         
         // Random extension from tree
         float extension = MIN_BRANCH_EXTENSION + 
-            static_cast<float>(rand()) / RAND_MAX * (MAX_BRANCH_EXTENSION - MIN_BRANCH_EXTENSION);
+            static_cast<float>((float)rand()) / (float)RAND_MAX * (MAX_BRANCH_EXTENSION - MIN_BRANCH_EXTENSION);
 
         // Calculate branch position
         float branchX = !isLeft ? TREE_WIDTH : WINDOW_WIDTH - TREE_WIDTH - extension;
@@ -473,7 +471,7 @@ void GenerateBranchesAndSquirrels()
             defaultHeight,
             g_SquirrelTexture,
             !isLeft,
-            SPRITE_SQUIRREL_DEFAULT_0,  // currentSprite
+            SPRITE_SQUIRREL_WITHOUT_EGG_0,  // currentSprite
             {0},  // spriteWidths
             {0},  // spriteHeights
             -1,   // branchType (not used for squirrels)
@@ -716,13 +714,16 @@ void RenderBackground()
 
 void RenderNest()
 {
-    // SDL_SetRenderDrawColor(g_Renderer, NEST_COLOR.r, NEST_COLOR.g, NEST_COLOR.b, NEST_COLOR.a);
-    // SDL_Rect nestRect = {
-    //     static_cast<int>(g_GameState.nest.x),
-    //     static_cast<int>(g_GameState.nest.y - g_GameState.cameraY), // Account for camera position
-    //     g_GameState.nest.width,
-    //     g_GameState.nest.height};
-    // SDL_RenderFillRect(g_Renderer, &nestRect);
+    if (0) // for debug
+    {
+        SDL_SetRenderDrawColor(g_Renderer, NEST_COLOR.r, NEST_COLOR.g, NEST_COLOR.b, NEST_COLOR.a);
+        SDL_Rect nestRect = {
+            static_cast<int>(g_GameState.nest.x),
+            static_cast<int>(g_GameState.nest.y - g_GameState.cameraY), // Account for camera position
+            g_GameState.nest.width,
+            g_GameState.nest.height};
+        SDL_RenderFillRect(g_Renderer, &nestRect);
+    }
 }
 
 void Render()
@@ -873,7 +874,7 @@ void HandleCollision(GameObject *squirrel)
     g_EggAnimationTime = 0.0f;
 
     squirrel->hasEgg = true;
-    squirrel->currentSprite = SPRITE_SQUIRREL_WITH_EGG_2;     // Switch to catching animation
+    squirrel->currentSprite = SPRITE_SQUIRREL_WITH_EGG_1;     // Switch to catching animation
     squirrel->animationTimer = 0.5f; // Set animation duration to 0.5 seconds
     // g_GameState.egg.width = 0;      // Make egg invisible
     // g_GameState.egg.height = 0;
@@ -1308,10 +1309,9 @@ void SaveScore(Uint32 time)
     
     char scoreStr[32];
     snprintf(scoreStr, sizeof(scoreStr), "%02d:%02d.%03d", minutes, seconds, milliseconds);
-    
     EM_ASM({
         // Get existing scores
-        var scores = localStorage.getItem('scores') || '';
+        var scores = localStorage.getItem('scores') || "";
         // Add new score
         scores += UTF8ToString($0) + '\n';
         // Keep only last 5 scores
@@ -1548,7 +1548,7 @@ std::vector<std::string> GetLastFiveScores() {
     #ifdef __EMSCRIPTEN__
     // Web version - use localStorage
     char* scoresStr = (char*)EM_ASM_INT({
-        var scores = localStorage.getItem('scores') || '';
+        var scores = localStorage.getItem('scores') || "";
         var lengthBytes = lengthBytesUTF8(scores) + 1;
         var stringOnWasmHeap = _malloc(lengthBytes);
         stringToUTF8(scores, stringOnWasmHeap, lengthBytes);
@@ -1589,7 +1589,7 @@ std::vector<std::string> GetLastFiveScores() {
 
         // Get last 5 scores (or less if there aren't 5 yet)
         int startIdx = std::max(0, static_cast<int>(allScores.size()) - 5);
-        for (int i = startIdx; i < allScores.size(); i++) {
+        for (int i = startIdx; i < (int)allScores.size(); i++) {
             scores.push_back(allScores[i]);
         }
     }
@@ -1649,28 +1649,27 @@ void RenderLastScores() {
     }
 }
 
-void UpdateSquirrelAnimations(float deltaTime) {
-    for (auto& squirrel : g_GameState.squirrels) {
-        if (squirrel.hasEgg && squirrel.animationTimer > 0) {
+void UpdateSquirrelAnimations(float deltaTime) 
+{
+    for (auto& squirrel : g_GameState.squirrels) 
+    {
+        // handle squirrel with egg
+        if ( squirrel.hasEgg && squirrel.animationTimer > 0) {
+            squirrel.currentSprite=SPRITE_SQUIRREL_WITH_EGG_1;
             squirrel.animationTimer -= deltaTime;
             
-            //printf("Animation Timer: %.2f, deltaTime %.2f, Current Sprite: %d\n", squirrel.animationTimer,deltaTime , squirrel.currentSprite);
-
             // Animation finished
             if (squirrel.animationTimer <= 0) {
-                squirrel.currentSprite = SPRITE_SQUIRREL_WITH_EGG_2;  // Return to default sprite
-                // Handle what happens after catching animation
-                // For example, reset egg or update score
+                squirrel.currentSprite = SPRITE_SQUIRREL_TO_LAUNCH_2;  // Return to default sprite
+
                 g_GameState.egg.width = EGG_SIZE_X;   // Make egg visible again
                 g_GameState.egg.height = EGG_SIZE_Y;
                 squirrel.hasEgg = false;
-                // ... any other post-catch logic ...
             }
 
-            printf("Squirrel sprite range check: %d is between 2-4? %s\n", 
-                   squirrel.currentSprite,
-                   (squirrel.currentSprite >= SPRITE_SQUIRREL_WITH_EGG_2 && squirrel.currentSprite <= SPRITE_SQUIRREL_TO_LAUNCH_4) ? "true" : "false");
-            if (squirrel.currentSprite >= SPRITE_SQUIRREL_WITH_EGG_2 && squirrel.currentSprite <= SPRITE_SQUIRREL_TO_LAUNCH_4)
+        }
+
+            if (squirrel.currentSprite >= SPRITE_SQUIRREL_TO_LAUNCH_2 &&  squirrel.currentSprite <= SPRITE_SQUIRREL_TO_LAUNCH_4)
             {
                 squirrel.animationTimer = 10;
                 static float animTimer = 0;
@@ -1682,14 +1681,14 @@ void UpdateSquirrelAnimations(float deltaTime) {
                 
                 if (animTimer >= 0.4F) {
                     squirrel.currentSprite++;
-                    if (squirrel.currentSprite > 4) {
-                        squirrel.currentSprite = 2;
+                    if (squirrel.currentSprite > SPRITE_SQUIRREL_TO_LAUNCH_4) {
+                        squirrel.currentSprite = SPRITE_SQUIRREL_TO_LAUNCH_2;
                     }
                     animTimer = 0;
                 }
             }
 
-        }
+        
     }
 }
 
