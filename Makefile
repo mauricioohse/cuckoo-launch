@@ -6,7 +6,8 @@ INCLUDES = -I./include/SDL2
 
 # Windows-specific
 WINDOWS_LIBS = -L./lib -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lwinmm -lusp10 -lgdi32 -static -static-libgcc -static-libstdc++ \
-    -lole32 -loleaut32 -limm32 -lversion -lsetupapi -lcfgmgr32 -lrpcrt4 -mwindows
+    -lole32 -loleaut32 -limm32 -lversion -lsetupapi -lcfgmgr32 -lrpcrt4 \
+    #-mwindows # removes terminal window
 
 # Web-specific
 WEB_FLAGS = -s USE_SDL=2 -s USE_SDL_IMAGE=2 -s USE_SDL_TTF=2 -s USE_SDL_MIXER=2 \

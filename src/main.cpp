@@ -82,7 +82,7 @@ const float INITIAL_HOLD_TIME = 3.0f;  // Seconds to hold egg in nest
 
 #define NUM_LAUNCH_SOUNDS 4
 
-#define printf if(0) printf
+// #define printf if(0) printf
 
 SDL_Window* g_Window = nullptr;
 SDL_Renderer* g_Renderer = nullptr;
@@ -102,8 +102,17 @@ Uint32 g_lastElapsedTime = 0;
 SDL_Texture* g_EggTextures[EGG_SPRITE_COUNT] = {nullptr};
 float g_EggAnimationTime = 0.0f;
 
-#define SQUIRREL_SPRITE_COUNT 5
-SDL_Texture* g_SquirrelTextures[SQUIRREL_SPRITE_COUNT] = {nullptr};
+
+enum {
+    SPRITE_SQUIRREL_DEFAULT_0,
+    SPRITE_SQUIRREL_WITHOUT_EGG_1,
+    SPRITE_SQUIRREL_WITH_EGG_2,
+    SPRITE_SQUIRREL_TO_LAUNCH_3,
+    SPRITE_SQUIRREL_TO_LAUNCH_4,
+    SPRITE_SQUIRREL_MAX_VALUE // SHOULD ALWAYS BE THE LAST
+};
+
+SDL_Texture* g_SquirrelTextures[SPRITE_SQUIRREL_MAX_VALUE] = {nullptr};
 
 // Add to global variables section
 SDL_Texture* g_BackgroundBase = nullptr;
@@ -122,11 +131,11 @@ struct GameObject {
     SDL_Texture* texture;
     bool isLeftSide;  // Used for squirrels to determine which side they're on
     int currentSprite = 0;
-    int spriteWidths[SQUIRREL_SPRITE_COUNT] = {0};
-    int spriteHeights[SQUIRREL_SPRITE_COUNT] = {0};
+    int spriteWidths[SPRITE_SQUIRREL_MAX_VALUE] = {0};
+    int spriteHeights[SPRITE_SQUIRREL_MAX_VALUE] = {0};
     int branchType;      // For branches: which type of branch (0-2)
     int positionIndex;   // For squirrels: which position on the branch (0-1)
-    float animationTimer;  // Track animation duration
+    float animationTimer;  // Track animation duration, measured in seconds
     bool hasEgg;          // Track if squirrel has egg
 };
 
@@ -299,7 +308,7 @@ bool InitSDL()
     g_SquirrelTextures[4] = LoadTexture("assets/squirrel/sprite_esquilo-launch_3.png");
 
     // Check if all textures loaded successfully
-    for (int i = 0; i < SQUIRREL_SPRITE_COUNT; i++)
+    for (int i = 0; i < SPRITE_SQUIRREL_MAX_VALUE; i++)
     {
         if (!g_SquirrelTextures[i])
         {
@@ -464,7 +473,7 @@ void GenerateBranchesAndSquirrels()
             defaultHeight,
             g_SquirrelTexture,
             !isLeft,
-            0,  // currentSprite
+            SPRITE_SQUIRREL_DEFAULT_0,  // currentSprite
             {0},  // spriteWidths
             {0},  // spriteHeights
             -1,   // branchType (not used for squirrels)
@@ -785,7 +794,7 @@ void CleanUp()
     }
 
     // Cleanup squirrel textures
-    for (int i = 0; i < SQUIRREL_SPRITE_COUNT; i++)
+    for (int i = 0; i < SPRITE_SQUIRREL_MAX_VALUE; i++)
     {
         SDL_DestroyTexture(g_SquirrelTextures[i]);
     }
@@ -862,10 +871,9 @@ void HandleCollision(GameObject *squirrel)
     
     g_GameState.currentEggSprite = 0;  // Reset animation
     g_EggAnimationTime = 0.0f;
-    squirrel->currentSprite = 1;  // Change to launch sprite
 
     squirrel->hasEgg = true;
-    squirrel->currentSprite = 2;     // Switch to catching animation
+    squirrel->currentSprite = SPRITE_SQUIRREL_WITH_EGG_2;     // Switch to catching animation
     squirrel->animationTimer = 0.5f; // Set animation duration to 0.5 seconds
     // g_GameState.egg.width = 0;      // Make egg invisible
     // g_GameState.egg.height = 0;
@@ -1405,7 +1413,7 @@ void UpdateEggAnimation(float deltaTime)
 
 // First, move the sprite dimension loading to a separate function
 void LoadSquirrelSpriteDimensions(GameObject& squirrel) {
-    for (int i = 0; i < SQUIRREL_SPRITE_COUNT; i++) {
+    for (int i = 0; i < SPRITE_SQUIRREL_MAX_VALUE; i++) {
         int width, height;
         SDL_QueryTexture(g_SquirrelTextures[i], nullptr, nullptr, &width, &height);
         squirrel.spriteWidths[i] = static_cast<int>(width * SQUIRREL_SCALE);
@@ -1646,9 +1654,11 @@ void UpdateSquirrelAnimations(float deltaTime) {
         if (squirrel.hasEgg && squirrel.animationTimer > 0) {
             squirrel.animationTimer -= deltaTime;
             
+            //printf("Animation Timer: %.2f, deltaTime %.2f, Current Sprite: %d\n", squirrel.animationTimer,deltaTime , squirrel.currentSprite);
+
             // Animation finished
             if (squirrel.animationTimer <= 0) {
-                squirrel.currentSprite = 2;  // Return to default sprite
+                squirrel.currentSprite = SPRITE_SQUIRREL_WITH_EGG_2;  // Return to default sprite
                 // Handle what happens after catching animation
                 // For example, reset egg or update score
                 g_GameState.egg.width = EGG_SIZE_X;   // Make egg visible again
@@ -1657,12 +1667,20 @@ void UpdateSquirrelAnimations(float deltaTime) {
                 // ... any other post-catch logic ...
             }
 
-            if (squirrel.currentSprite >= 2 && squirrel.currentSprite <= 4)
+            printf("Squirrel sprite range check: %d is between 2-4? %s\n", 
+                   squirrel.currentSprite,
+                   (squirrel.currentSprite >= SPRITE_SQUIRREL_WITH_EGG_2 && squirrel.currentSprite <= SPRITE_SQUIRREL_TO_LAUNCH_4) ? "true" : "false");
+            if (squirrel.currentSprite >= SPRITE_SQUIRREL_WITH_EGG_2 && squirrel.currentSprite <= SPRITE_SQUIRREL_TO_LAUNCH_4)
             {
+                squirrel.animationTimer = 10;
                 static float animTimer = 0;
                 // Update animation every 400ms
-                animTimer += deltaTime * 1000; // Convert to milliseconds
-                if (animTimer >= 400) {
+                animTimer += deltaTime;
+                
+                // printf("Animation Timer: %.2f, Delta Time: %.2f, Current Sprite: %d\n", 
+                //      animTimer, deltaTime, squirrel.currentSprite);
+                
+                if (animTimer >= 0.4F) {
                     squirrel.currentSprite++;
                     if (squirrel.currentSprite > 4) {
                         squirrel.currentSprite = 2;
@@ -1682,7 +1700,7 @@ struct MainLoopData {
 } g_MainLoopData;
 
 
-void UpdateGame(Uint32 deltaTime)
+void UpdateGame(float deltaTime)
 {
 
     UpdatePhysics(deltaTime);
@@ -1696,7 +1714,8 @@ void UpdateGame(Uint32 deltaTime)
 void main_loop_iteration() {
     Uint32 frameStart = SDL_GetTicks();
     Uint32 currentTime = frameStart;
-    float deltaTime = (currentTime - g_MainLoopData.lastTime) / 1000.0f;
+    float deltaTime = static_cast<float>(currentTime - g_MainLoopData.lastTime) / 1000.0f;
+
     g_MainLoopData.lastTime = currentTime;
 
     while (SDL_PollEvent(&g_MainLoopData.e)) {
@@ -1801,7 +1820,7 @@ void main_loop_iteration() {
             else if (g_MainLoopData.e.button.button == SDL_BUTTON_RIGHT && g_GameState.eggIsHeld)
             {
                 HitAngleSquare();
-            }
+            } 
         }
         else if (g_MainLoopData.e.type == SDL_MOUSEBUTTONUP)
         {

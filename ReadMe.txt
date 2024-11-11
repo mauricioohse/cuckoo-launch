@@ -1,7 +1,8 @@
 TODO:
 
 
-[ ] - fix animations
+[x] - fix animations
+[ ] - make for debug and for release
 [ ] - rewrite better archtecture
 [ ] - create git page
 [ ] - global online scores
