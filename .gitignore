@@ -6,5 +6,6 @@ include/**
 bin/**
 assets/*.txt
 emsdk/**
+game-release/**
 cuckoo-launch/**
 *.zip
