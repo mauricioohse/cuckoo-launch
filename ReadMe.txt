@@ -2,8 +2,9 @@ TODO:
 
 
 [x] - fix animations
-[ ] - make for debug and for release
-[ ] - rewrite better archtecture
+[x] - make for debug and for release
+[x] - remove emscripten border 
+[ ] - rewrite better architecture
 [ ] - create git page
 [ ] - global online scores
 [ ] - main menu
