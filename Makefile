@@ -94,7 +94,7 @@ zip: release web
 	@mkdir -p releases
 	@rm -f releases/cuckoo-launch-win.zip releases/cuckoo-launch-web.zip  # Remove existing zips if they exist
 	cd $(RELEASE_DIR) && 7z a -tzip ../../releases/cuckoo-launch-win.zip ./*
-	cd $(WEB_DIR) && 7z a -tzip ../../releases/cuckoo-launch-web.zip ./*
+	cd $(WEB_DIR) && 7z a -tzip ../releases/cuckoo-launch-web.zip ./*
 	@echo "Release packages created in releases folder"
 
 # actually make all
