@@ -16,8 +16,8 @@ DEBUG_TARGET = $(DEBUG_DIR)/game.exe
 RELEASE_TARGET = $(RELEASE_DIR)/game.exe
 WEB_TARGET = $(WEB_DIR)/index.html
 
-# DLL files to copy (add all your DLLs here)
-DLLS = bin/SDL2.dll bin/SDL2_image.dll bin/SDL2_ttf.dll bin/SDL2_mixer.dll
+# DLL files to copy (using wildcard to get all DLLs)
+DLLS = $(wildcard dll/*.dll)
 
 # Debug-specific
 DEBUG_FLAGS = -g -DDEBUG
@@ -106,7 +106,7 @@ clean-release:
 	rm -rf $(RELEASE_DIR)
 
 clean-web:
-	rm -rf $(WEB_DIR)/*
+	rm -f $(WEB_DIR)/index.js $(WEB_DIR)/index.data $(WEB_DIR)/index.wasm
 
 # Clean all builds
 clean: clean-debug clean-release clean-web
