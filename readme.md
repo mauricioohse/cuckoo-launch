@@ -23,13 +23,17 @@ The game jam version was written in three days, but some bugs were included that
 ## 🛠️ Building from Source
 
 ### Prerequisites
-- SDL2
-- SDL2_image
-- SDL2_ttf
-- SDL2_mixer
+
+
 - [Make](https://community.chocolatey.org/packages/make) (for application build)
 - [Emscripten](https://emscripten.org/) (for web build - )
 - bash (for running the .sh scripts)
+
+the below libraries .a and .dll.a files should be under lib/. more details on lib/how-to-get-lib-files.txt.
+- [SDL2](https://github.com/libsdl-org/SDL/releases)
+- [SDL2_image](https://github.com/libsdl-org/SDL_image/releases)
+- [SDL2_ttf](https://github.com/libsdl-org/SDL_ttf/releases)
+- [SDL2_mixer](https://github.com/libsdl-org/SDL_mixer/releases)
 
 ### Building the Application
 
@@ -53,7 +57,7 @@ The executable will be created in bin/ folder.
 # Make sure you have emscripten installed and activated
 source path/to/emsdk/emsdk_env.sh  # or emsdk_env.bat on Windows
 ```
-## Build and run using the provided script
+### Build and run using the provided script
 ```bash
 ./runweb.sh
 ```

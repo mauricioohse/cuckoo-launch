@@ -1,7 +1,7 @@
 *.exe
-
 lib/**
-include/**
+!lib/.gitkeep
+!lib/how-to-get-libs.txt
 .vscode/**
 bin/**
 assets/*.txt

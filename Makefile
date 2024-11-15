@@ -89,11 +89,13 @@ $(WEB_TARGET): $(SOURCES)
 	@echo "Web build complete: $(WEB_TARGET)"
 
 # Create release package
-zip: release
-	@echo "Creating release package..."
-	@rm -f game-release.zip  # Remove existing zip if it exists
-	cd $(RELEASE_DIR) && 7z a -tzip ../../game-release.zip ./*
-	@echo "Release package created: game-release.zip"
+zip: release web
+	@echo "Creating release packages..."
+	@mkdir -p releases
+	@rm -f releases/cuckoo-launch-win.zip releases/cuckoo-launch-web.zip  # Remove existing zips if they exist
+	cd $(RELEASE_DIR) && 7z a -tzip ../../releases/cuckoo-launch-win.zip ./*
+	cd $(WEB_DIR) && 7z a -tzip ../../releases/cuckoo-launch-web.zip ./*
+	@echo "Release packages created in releases folder"
 
 # actually make all
 all: debug release web zip

@@ -1,0 +1,25 @@
+How to get SDL2 Development Libraries for this project
+===================================================
+
+1. Download the development libraries for MinGW:
+   - SDL2: https://github.com/libsdl-org/SDL/releases (SDL2-devel-2.x.x-mingw.zip)
+   - SDL2_image: https://github.com/libsdl-org/SDL_image/releases (SDL2_image-devel-2.x.x-mingw.zip)
+   - SDL2_ttf: https://github.com/libsdl-org/SDL_ttf/releases (SDL2_ttf-devel-2.x.x-mingw.zip)
+   - SDL2_mixer: https://github.com/libsdl-org/SDL_mixer/releases (SDL2_mixer-devel-2.x.x-mingw.zip)
+
+2. From each downloaded ZIP, copy these files to this lib/ directory:
+   - All .a files
+   - All .dll.a files
+   - All .la files
+
+Required files checklist:
+------------------------
+- libSDL2.a
+- libSDL2.dll.a
+- libSDL2_image.a
+- libSDL2_image.dll.a
+- libSDL2_ttf.a
+- libSDL2_ttf.dll.a
+- libSDL2_mixer.a
+- libSDL2_mixer.dll.a
+- libSDL2
